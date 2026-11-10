@@ -120,7 +120,8 @@ export async function POST(req: Request) {
 | Prisma models | PascalCase singular | `RoomParticipant` |
 
 - `strict` TypeScript is on; **no `any`** (eslint `@typescript-eslint/no-explicit-any` = error), no `as unknown as` casts — model API boundaries with zod schemas instead.
-- Prisma-generated types are imported from `@prisma/client` — never hand-duplicate them; map to DTOs at the `lib/` boundary when the API shape differs from the table.
+- Prisma types come from the generated client: `import type { PrismaClient } from "@/generated/prisma/client"` — never hand-duplicate table shapes; map to DTOs at the `lib/` boundary when the API shape differs.
+- The generated client lives in `generated/` (gitignored) — run `npm run db:generate` after schema edits (also runs on `postinstall`).
 
 ## 10. Errors, loading, empty
 

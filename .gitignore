@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# prisma generated client (recreated by postinstall)
+/generated
+
 # vercel
 .vercel
 

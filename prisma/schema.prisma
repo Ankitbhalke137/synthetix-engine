@@ -1,0 +1,202 @@
+// Synthetix Engine — canonical schema (mirrors docs/database-and-security.md §2)
+// Prisma 7: generator "prisma-client" (output required); datasource URL lives in prisma7.config.ts.
+// Better Auth models were generated with `@better-auth/cli generate` — field names are
+// resolved by Better Auth at runtime, so do not rename them.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// Better Auth 1.7 models
+// ============================================================
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions    Session[]
+  accounts    Account[]
+  hostedRooms Room[]            @relation("Host")
+  memberships RoomParticipant[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ============================================================
+// Synthetix application models
+// ============================================================
+
+enum RoomStatus {
+  draft
+  live
+  ended
+  archived
+
+  @@map("room_status")
+}
+
+enum ParticipantRole {
+  host
+  moderator
+  participant
+  viewer
+
+  @@map("participant_role")
+}
+
+enum RecordingStatus {
+  uploading
+  ready
+  failed
+  deleted
+
+  @@map("recording_status")
+}
+
+model Room {
+  id        String     @id @default(uuid())
+  slug      String     @unique
+  name      String
+  status    RoomStatus @default(draft)
+  hostId    String
+  host      User       @relation("Host", fields: [hostId], references: [id], onDelete: Cascade)
+  endedAt   DateTime?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  participants RoomParticipant[]
+  transcripts  Transcript[]
+  recordings   Recording[]
+  auditEvents  AuditEvent[]
+
+  @@index([hostId, createdAt])
+  @@index([status])
+  @@map("rooms")
+}
+
+model RoomParticipant {
+  id          String          @id @default(uuid())
+  roomId      String
+  room        Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  displayName String
+  role        ParticipantRole @default(participant)
+  joinedAt    DateTime        @default(now())
+  leftAt      DateTime?
+  lastSeq     Int             @default(0)
+
+  // Guests (userId = null) can join repeatedly; authenticated users have one row per room.
+  @@unique([roomId, userId])
+  @@index([roomId])
+  @@map("room_participants")
+}
+
+model Transcript {
+  id        String   @id @default(uuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  seq       Int
+  speakerId String?
+  speaker   String
+  text      String
+  startMs   Int
+  endMs     Int
+  createdAt DateTime @default(now())
+
+  // Idempotent persists: retried chunks cannot duplicate a caption row.
+  @@unique([roomId, seq])
+  @@index([roomId, startMs])
+  @@map("transcripts")
+}
+
+model Recording {
+  id          String          @id @default(uuid())
+  roomId      String
+  room        Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  // Object key only — presigned URLs expire, never store them (errata #4).
+  storageKey  String          @unique
+  mimeType    String          @default("video/webm")
+  sizeBytes   BigInt          @default(0)
+  durationSec Float           @default(0)
+  status      RecordingStatus @default(uploading)
+  partCount   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([roomId, createdAt])
+  @@index([status])
+  @@map("recordings")
+}
+
+model AuditEvent {
+  id        String   @id @default(uuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  actorId   String?
+  action    String
+  targetId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([roomId, createdAt])
+  @@map("audit_events")
+}
