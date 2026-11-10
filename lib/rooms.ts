@@ -24,6 +24,23 @@ export type ParticipantRecord = {
   role: Role;
 };
 
+export type RoomErrorCode =
+  | "ROOM_NOT_FOUND"
+  | "ROOM_ENDED"
+  | "ROOM_NOT_LIVE"
+  | "DISPLAY_NAME_REQUIRED";
+
+/** Expected, user-facing failures — route handlers map these to status codes. */
+export class RoomError extends Error {
+  readonly code: RoomErrorCode;
+
+  constructor(code: RoomErrorCode, message: string) {
+    super(message);
+    this.name = "RoomError";
+    this.code = code;
+  }
+}
+
 /**
  * Narrow persistence port. Services depend on this instead of Prisma so room
  * lifecycle rules are unit-testable with an in-memory store.
@@ -132,4 +149,88 @@ export async function createRoom(
 
   // Unreachable: the loop either returns or throws.
   throw new Error("room slug allocation failed");
+}
+
+export type AdmitInput = {
+  slug: string;
+  /** Authenticated member. Omitted for guests (display name required). */
+  user?: { id: string; name: string };
+  displayName?: string;
+};
+
+export type AdmitResult = {
+  room: RoomRecord;
+  participant: ParticipantRecord;
+  role: Role;
+  identity: string;
+};
+
+/**
+ * Admits a viewer to a room (RBAC doc §4).
+ *
+ * - `ended`/`archived` rooms reject everyone (read-only views are separate)
+ * - a draft is host-only; the host's first admission moves it to `live`
+ * - live rooms admit any authenticated user, who becomes a `participant`
+ * - guests (no user) need a display name and a live room; their identity is
+ *   derived from the persisted participant row, never from client input
+ */
+export async function admitParticipant(
+  store: RoomStore,
+  input: AdmitInput,
+): Promise<AdmitResult> {
+  const room = await store.findBySlug(input.slug);
+
+  if (!room) {
+    throw new RoomError("ROOM_NOT_FOUND", "This room does not exist.");
+  }
+
+  if (room.status === "ended" || room.status === "archived") {
+    throw new RoomError("ROOM_ENDED", "This room has ended.");
+  }
+
+  if (input.user) {
+    const existing = await store.findParticipant(room.id, input.user.id);
+    const role: Role = existing?.role ?? (room.hostId === input.user.id ? "host" : "participant");
+
+    if (room.status === "draft" && role !== "host" && !existing) {
+      throw new RoomError("ROOM_NOT_LIVE", "The host has not started this room yet.");
+    }
+
+    const participant = await store.upsertParticipant({
+      roomId: room.id,
+      userId: input.user.id,
+      displayName: existing?.displayName ?? input.user.name,
+      role,
+    });
+
+    // First host admission is the draft → live transition.
+    if (room.status === "draft" && role === "host") {
+      await store.markLive(room.id);
+    }
+
+    return {
+      room: room.status === "draft" && role === "host" ? { ...room, status: "live" } : room,
+      participant,
+      role,
+      identity: input.user.id,
+    };
+  }
+
+  if (room.status === "draft") {
+    throw new RoomError("ROOM_NOT_LIVE", "The host has not started this room yet.");
+  }
+
+  const displayName = input.displayName?.trim();
+  if (!displayName) {
+    throw new RoomError("DISPLAY_NAME_REQUIRED", "Guests must provide a display name.");
+  }
+
+  const participant = await store.addGuest({ roomId: room.id, displayName });
+
+  return {
+    room,
+    participant,
+    role: "participant",
+    identity: `guest:${participant.id}`,
+  };
 }
