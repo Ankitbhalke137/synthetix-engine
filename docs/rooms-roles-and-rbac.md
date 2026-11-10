@@ -135,3 +135,30 @@ All ops are idempotent (repeat → no-op, 200) and audited. Targets are resolved
 | guest (`userId null`) → promote | 403 |
 | every denied path | no `AuditEvent` row with `action` written as success |
 | every allowed path | exactly one `AuditEvent` row |
+
+## 9. HTTP contract (Phase 3)
+
+`POST /api/livekit/token` is the only token mint — the browser never sees the API secret.
+
+```http
+POST /api/livekit/token
+Content-Type: application/json
+
+{ "slug": "design-review-abc123" }
+```
+
+| Status | `error.code` | When |
+|---|---|---|
+| 200 | — | `{ token, url, room: { slug, name }, role, identity }` |
+| 400 | `INVALID_INPUT` | malformed JSON, bad slug, or unknown keys (strict schema) |
+| 401 | `UNAUTHENTICATED` | no session cookie |
+| 404 | `ROOM_NOT_FOUND` | unknown slug |
+| 409 | `ROOM_NOT_LIVE` / `ROOM_ENDED` | draft (non-host) / ended or archived |
+
+Rules:
+
+- the role is re-derived from `RoomParticipant` on every request; the body cannot claim one — unknown keys are rejected outright
+- the host's first successful call performs `draft → live`; reconnects are idempotent
+- responses are `Cache-Control: no-store`; tokens are never persisted or logged
+- this route is session-only (anon → 401). Guests are already handled by `admitParticipant`, but their entry point ships with the Phase 4 join flow
+- `createRoomAction` (server action, `app/actions/rooms.ts`) creates a draft room for the signed-in user and returns `{ ok: true, slug }`

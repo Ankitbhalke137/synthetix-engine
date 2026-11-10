@@ -2,7 +2,7 @@
 
 **A browser-based live studio** — multi-guest WebRTC rooms, real-time AI captions, and cloud recordings — engineered to run on a **\$0/month free-tier stack** (Neon · Vercel · LiveKit · Groq · Upstash · Better Auth).
 
-> **Status:** Phase 2 complete ✅ — auth + schema live on Neon (sign-up / sign-in verified against the real DB). Building Phase 3. Build plan and rules live in [`AGENTS.md`](./AGENTS.md).
+> **Status:** Phase 3 complete ✅ — rooms + LiveKit tokens verified against Neon and LiveKit Cloud. Building Phase 4 (studio UI). Build plan and rules live in [`AGENTS.md`](./AGENTS.md).
 
 ---
 
@@ -88,7 +88,7 @@ npm run db:migrate           # apply prisma/migrations to your Neon branch
 npm run dev                  # http://localhost:3000
 ```
 
-Set `DATABASE_URL` (pooled Neon string) in `.env.local`, then `npm run db:push` — Phase 2 is code-complete; migrations and real login tests need credentials. Continue with [`AGENTS.md`](./AGENTS.md) → Phase 3.
+Fill `.env.local` (pooled `DATABASE_URL`, LiveKit key/secret/URL), run `npm run db:migrate`, then `npm run dev`. Verify the wiring with `npm run db:smoke`; continue with [`AGENTS.md`](./AGENTS.md) → Phase 4.
 
 ## Implementation status
 
@@ -97,7 +97,7 @@ Set `DATABASE_URL` (pooled Neon string) in `.env.local`, then `npm run db:push` 
 | 0 | Engineering doc set (this repo) | ✅ |
 | 1 | Next.js scaffold + deps + env template | ✅ |
 | 2 | Auth (Better Auth) + Prisma schema on Neon | ✅ live — sign-up/sign-in verified |
-| 3 | Rooms: create/join + LiveKit token issuance | ⬜ |
+| 3 | Rooms: create/join + LiveKit token issuance | ✅ verified — create/admit/token on real Neon + LiveKit |
 | 4 | Studio UI: video grid, controls, transcript rail | ⬜ |
 | 5 | STT pipeline: worklet → VAD → Groq → DataChannel | ⬜ |
 | 6 | Recording: MediaRecorder → multipart presigned upload | ⬜ |
