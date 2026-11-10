@@ -2,7 +2,7 @@
 
 **A browser-based live studio** — multi-guest WebRTC rooms, real-time AI captions, and cloud recordings — engineered to run on a **\$0/month free-tier stack** (Neon · Vercel · LiveKit · Groq · Upstash · Better Auth).
 
-> **Status:** Phase 1 complete — planning docs ✅, scaffold ✅. Feature implementation has **not started** (docs-first workflow). Build plan and rules live in [`AGENTS.md`](./AGENTS.md).
+> **Status:** Phase 2 **code complete** — auth + Prisma schema wired (migration pending `DATABASE_URL`). Phases 3–8 in progress. Build plan and rules live in [`AGENTS.md`](./AGENTS.md).
 
 ---
 
@@ -87,7 +87,7 @@ npm install                  # already done if scaffolded
 npm run dev                  # http://localhost:3000
 ```
 
-Feature implementation is gated on plan approval — start with [`AGENTS.md`](./AGENTS.md) → Phase 2.
+Set `DATABASE_URL` (pooled Neon string) in `.env.local`, then `npm run db:push` — Phase 2 is code-complete; migrations and real login tests need credentials. Continue with [`AGENTS.md`](./AGENTS.md) → Phase 3.
 
 ## Implementation status
 
