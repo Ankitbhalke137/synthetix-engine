@@ -108,6 +108,12 @@ All ops are idempotent (repeat → no-op, 200) and audited. Targets are resolved
 - `canPublish: false` for viewer (P1) — enforced by SFU, not UI.
 - `metadata.role` is what the client reads for Layer 3; server re-derives from DB for Layer 1 (never trust the token for authorization decisions *about the token holder's own mutations* — re-check DB).
 
+**Implemented** (`lib/livekit.ts` + `lib/room-policy.ts`):
+- `mintRoomToken()` signs with `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`, `ttl = 7200` (`TOKEN_TTL_SECONDS`), `metadata = { role, roomId }`
+- grants: `roomJoin`, `canSubscribe: true`; `canPublish`/`canPublishData` = role policy (false only for `viewer`)
+- `lib/room-policy.ts` is the single capability matrix (`can(role, capability)`) shared by token grants and future server actions; roles are parsed with zod, never cast
+- token tests decode the JWT and assert claims, TTL and HMAC signature without contacting LiveKit
+
 ## 7. Audit log
 
 `AuditEvent(roomId, actorId, action, targetId, metadata, createdAt)` — append-only, host-visible (P1 UI), 90-day retention (database-and-security §8). Interview talking point: *moderation without accountability is just an API with a kick button.*

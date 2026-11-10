@@ -19,6 +19,10 @@ export const EnvSchema = z.object({
 
   LIVEKIT_API_KEY: z.string().min(1),
   LIVEKIT_API_SECRET: z.string().min(1),
+  // Public by design: the browser needs the WebSocket URL. Never a key.
+  NEXT_PUBLIC_LIVEKIT_URL: z.url().refine((value) => value.startsWith("wss://"), {
+    message: "NEXT_PUBLIC_LIVEKIT_URL must be a wss:// URL",
+  }),
 
   GROQ_API_KEY: z.string().min(1),
 
