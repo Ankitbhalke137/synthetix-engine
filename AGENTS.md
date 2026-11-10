@@ -20,7 +20,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 |---|---|
 | **What** | Browser-based live studio: multi-guest WebRTC rooms, real-time AI captions (Groq Whisper), client-side recordings → Neon Object Storage. \$0/month free-tier stack. |
 | **Why** | Showcase SDE project: requirements → architecture + ADRs → security → quality gates → CI, all engineering-doc driven. |
-| **Phase** | **1 complete** (docs ✅, scaffold ✅). Feature code starts at Phase 2 — see [`README.md`](./README.md#implementation-status) status table. |
+| **Phase** | **2 code complete** (docs ✅, scaffold ✅, env/DB ✅, auth wiring ✅) — migration pending `DATABASE_URL`. Next: Phase 3 (rooms + tokens). See [`README.md`](./README.md#implementation-status). |
 | **Stack** | Next.js **16.4.6** (App Router) · React 19.3 · TypeScript strict · Tailwind **v4** (CSS `@theme`, no config file) · Prisma **7** (`prisma-client` generator, `prisma7.config.ts`, generated client in `generated/`) + `@neondatabase/serverless` · Better Auth · LiveKit · Groq · Upstash · AWS S3 SDK (Neon S3 endpoint) |
 | **Node** | Local **v20.20.2** — some installed packages warn they want Node ≥ 22 (`machina`, `@prisma/streams-local`). Non-blocking now; if Prisma tooling misbehaves, switch to Node 22 LTS (also matches Vercel builds). |
 | **Original idea** | [`BLUEPRINT-ORIGINAL.md`](./docs/BLUEPRINT-ORIGINAL.md) — kept for provenance; **superseded** by this doc set (§6 errata). |
