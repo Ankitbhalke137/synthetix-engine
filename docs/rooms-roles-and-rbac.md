@@ -80,6 +80,9 @@ Edge rules:
 - Rejoining an `archived` room → read-only transcript/playback view, no new A/V.
 - Slugs are unique and never reused after deletion.
 
+**Implemented** (`lib/rooms.ts`):
+- `createRoom()` — draft room + host membership, readable slug with random suffix (retries once on a rare collision); persistence sits behind the `RoomStore` port (`prismaRoomStore` is the only SQL-aware adapter)
+
 ## 5. Moderation operations (server action contracts)
 
 | Op | Input | Checks | Effects |
