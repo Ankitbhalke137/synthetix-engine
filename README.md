@@ -2,7 +2,7 @@
 
 **A browser-based live studio** — multi-guest WebRTC rooms, real-time AI captions, and cloud recordings — engineered to run on a **\$0/month free-tier stack** (Neon · Vercel · LiveKit · Groq · Upstash · Better Auth).
 
-> **Status:** Phase 2 **code complete** — auth + Prisma schema wired (migration pending `DATABASE_URL`). Phases 3–8 in progress. Build plan and rules live in [`AGENTS.md`](./AGENTS.md).
+> **Status:** Phase 2 complete ✅ — auth + schema live on Neon (sign-up / sign-in verified against the real DB). Building Phase 3. Build plan and rules live in [`AGENTS.md`](./AGENTS.md).
 
 ---
 
@@ -84,6 +84,7 @@ graph TD
 # 1. Prereqs: Node 20+, a Neon project, LiveKit project, Groq key, Upstash store
 cp .env.example .env.local   # fill in values
 npm install                  # already done if scaffolded
+npm run db:migrate           # apply prisma/migrations to your Neon branch
 npm run dev                  # http://localhost:3000
 ```
 
@@ -95,7 +96,7 @@ Set `DATABASE_URL` (pooled Neon string) in `.env.local`, then `npm run db:push` 
 |---|---|---|
 | 0 | Engineering doc set (this repo) | ✅ |
 | 1 | Next.js scaffold + deps + env template | ✅ |
-| 2 | Auth (Better Auth) + Prisma schema on Neon | 🟨 code complete — migration pending `DATABASE_URL` |
+| 2 | Auth (Better Auth) + Prisma schema on Neon | ✅ live — sign-up/sign-in verified |
 | 3 | Rooms: create/join + LiveKit token issuance | ⬜ |
 | 4 | Studio UI: video grid, controls, transcript rail | ⬜ |
 | 5 | STT pipeline: worklet → VAD → Groq → DataChannel | ⬜ |

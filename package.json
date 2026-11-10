@@ -12,6 +12,9 @@
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:smoke": "tsx scripts/db-smoke.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

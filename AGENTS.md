@@ -20,7 +20,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 |---|---|
 | **What** | Browser-based live studio: multi-guest WebRTC rooms, real-time AI captions (Groq Whisper), client-side recordings → Neon Object Storage. \$0/month free-tier stack. |
 | **Why** | Showcase SDE project: requirements → architecture + ADRs → security → quality gates → CI, all engineering-doc driven. |
-| **Phase** | **2 code complete** (docs ✅, scaffold ✅, env/DB ✅, auth wiring ✅) — migration pending `DATABASE_URL`. Next: Phase 3 (rooms + tokens). See [`README.md`](./README.md#implementation-status). |
+| **Phase** | **2 complete** (docs ✅, scaffold ✅, env/DB ✅, auth wiring ✅ — sign-up/sign-in verified on Neon). Next: Phase 3 (rooms + tokens). See [`README.md`](./README.md#implementation-status). |
 | **Stack** | Next.js **16.4.6** (App Router) · React 19.3 · TypeScript strict · Tailwind **v4** (CSS `@theme`, no config file) · Prisma **7** (`prisma-client` generator, `prisma7.config.ts`, generated client in `generated/`) + `@neondatabase/serverless` · Better Auth · LiveKit · Groq · Upstash · AWS S3 SDK (Neon S3 endpoint) |
 | **Node** | Local **v20.20.2** — some installed packages warn they want Node ≥ 22 (`machina`, `@prisma/streams-local`). Non-blocking now; if Prisma tooling misbehaves, switch to Node 22 LTS (also matches Vercel builds). |
 | **Original idea** | [`BLUEPRINT-ORIGINAL.md`](./docs/BLUEPRINT-ORIGINAL.md) — kept for provenance; **superseded** by this doc set (§6 errata). |
@@ -85,7 +85,9 @@ npm run lint           # eslint
 npx tsc --noEmit       # typecheck (also run before PR)
 npm test               # vitest (unit; test:watch for dev loop)
 npx prisma validate    # after schema edits (needs a DATABASE_URL — CI uses a placeholder)
-npx prisma migrate dev # local, on Neon `dev` branch only
+npm run db:migrate     # local, on Neon `dev` branch only
+npm run db:deploy      # CI/production migration apply
+npm run db:smoke       # is my DATABASE_URL reachable + schema applied?
 npx prisma generate    # already runs via postinstall
 ```
 
@@ -138,7 +140,7 @@ npx prisma generate    # already runs via postinstall
 |---|---|---|
 | 0 | Engineering doc set | ✅ |
 | 1 | Scaffold + deps + `.env.example` + docs | ✅ |
-| 2 | Auth + Prisma schema on Neon | 🟨 code complete — migration pending `DATABASE_URL` |
+| 2 | Auth + Prisma schema on Neon | ✅ verified (sign-up → sign-in → get-session → cleanup) |
 | 3 | Rooms + LiveKit tokens (role claims) | ⬜ |
 | 4 | Studio UI (design-spec states) | ⬜ |
 | 5 | STT pipeline (VAD → Groq → DataChannel) | ⬜ |
