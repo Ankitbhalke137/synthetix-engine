@@ -81,7 +81,9 @@ Edge rules:
 - Slugs are unique and never reused after deletion.
 
 **Implemented** (`lib/rooms.ts`):
-- `createRoom()` — draft room + host membership, readable slug with random suffix (retries once on a rare collision); persistence sits behind the `RoomStore` port (`prismaRoomStore` is the only SQL-aware adapter)
+- `createRoom()` — draft room + host membership, readable slug with random suffix (retries once on a rare collision)
+- `admitParticipant()` — `ended`/`archived` → `ROOM_ENDED`; draft is host-only and the host's first admission is the `draft → live` transition; live rooms admit authenticated users as `participant`; guests need a display name and get `identity = guest:<participantId>` (never client input)
+- Persistence sits behind the `RoomStore` port (`prismaRoomStore` is the only SQL-aware adapter), so these lifecycle rules are unit-tested in memory
 
 ## 5. Moderation operations (server action contracts)
 
