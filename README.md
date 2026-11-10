@@ -1,36 +1,118 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎙️ Synthetix Engine
 
-## Getting Started
+**A browser-based live studio** — multi-guest WebRTC rooms, real-time AI captions, and cloud recordings — engineered to run on a **\$0/month free-tier stack** (Neon · Vercel · LiveKit · Groq · Upstash · Better Auth).
 
-First, run the development server:
+> **Status:** Phase 1 complete — planning docs ✅, scaffold ✅. Feature implementation has **not started** (docs-first workflow). Build plan and rules live in [`AGENTS.md`](./AGENTS.md).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## Why this project exists
+
+Demo calls, podcasts, and remote interviews need: multi-guest video, live captions, and a recording — usually \$50–200/mo across 5 vendors. Synthetix Engine proves a coherent product can run on free tiers **if you engineer around the limits instead of ignoring them** (rate-limit-aware chunking, client-side recording, quota guardrails).
+
+## Highlights
+
+- **Verified free-tier budget math.** Every external limit in this repo is cited from vendor docs (checked Nov 2026) — see [`architecture.md`](./docs/architecture.md#free-tier-budget).
+- **A rate-limit-aware STT pipeline.** VAD-based chunking engineered against Groq Whisper's *20 RPM / 2,000 req/day / min-10s-billable* caps. The original fixed 2-second chunk design would have stalled even a single speaker (see [Errata](#errata-vs-the-original-blueprint)).
+- **\$0 recordings.** Client-side `MediaRecorder` → multipart presigned uploads, because LiveKit's free tier only includes **60 transcode-minutes/month** (their Egress is effectively unusable for free).
+- **Branch-preview environments where DB *and* media files fork together** (Neon Object Storage copy-on-write) — no shared test bucket, no stale fixtures.
+- **A full engineering doc set** the way a staff engineer would write it: PRD → architecture + ADRs → RBAC → conventions → quality gates → PR rules.
+
+## Architecture
+
+```mermaid
+graph TD
+    Client[Next.js 16 on Vercel Hobby] -->|Sessions| Auth[Better Auth → Neon Postgres]
+    Client -->|WebRTC A/V| SFU[LiveKit Cloud Build]
+    Client -->|PCM + VAD chunks| Worklet[AudioWorklet - $0 client compute]
+    Worklet -->|WAV 8-12s| Proxy[Next.js STT proxy - server only key]
+    Proxy -->|Whisper| Groq[Groq API - free]
+    Groq -->|Transcript| Proxy
+    Proxy -->|RTCDataChannel| Client
+    Client -->|Multipart presigned PUT| Store[(Neon Object Storage)]
+    Store -->|rows| DB[(Neon Serverless Postgres)]
+    Client -->|429 retry queue| Redis[(Upstash Redis)]
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Stack — verified free-tier limits (Nov 2026)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Layer | Service | Free-tier limits (verified) | Cost |
+|---|---|---|---|
+| Hosting / Edge | **Vercel** Hobby | 100 GB bandwidth/mo, Server Actions & route handlers | \$0 |
+| Auth | **Better Auth** (self-hosted) | Runs inside Next.js API routes; Postgres via Prisma adapter | \$0 |
+| Database | **Neon** Serverless Postgres | 0.5 GiB storage, scale-to-zero, instant branching | \$0 |
+| Object Storage | **Neon Object Storage** (GA Sep 2026) | 5 GB/project, S3-compatible, branches with your DB, multipart to 10 GiB | \$0 |
+| Realtime SFU | **LiveKit Cloud** Build | 5,000 WebRTC participant-min/mo, 50 GB downstream/mo, 100 concurrent — *hard caps* | \$0 |
+| Speech-to-Text | **Groq** `whisper-large-v3-turbo` | 20 RPM · 2,000 req/day · 7,200 audio-s/hour · 28,800 audio-s/day · min 10 s billable · 25 MB max | \$0 |
+| Queue / Rate-limit | **Upstash** Redis | 10,000 commands/day | \$0 |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+> ⚠️ LiveKit's free plan is a **hard cap**: exceeding it makes new sessions *fail* (no overage billing). The app must preflight and guard quotas — see [`architecture.md`](./docs/architecture.md#free-tier-budget).
 
-## Learn More
+## What \$0 actually buys you (budget math)
 
-To learn more about Next.js, take a look at the following resources:
+| Resource | Budget | Realistic capacity |
+|---|---|---|
+| LiveKit participant-minutes | 5,000/mo | A 4-person room runs **~20 room-hours/month** ≈ one 45-min demo session/day |
+| LiveKit downstream | 50 GB/mo | ~23 room-hours at 720p; 360p grid thumbnails stretch it further |
+| Groq transcription | 2,000 req/day, ≥10 s billable each | **~5.5 hours of audio/day** transcribed (VAD chunks, active speaker only) |
+| Neon Postgres | 0.5 GiB | Thousands of rooms/transcript rows |
+| Neon Object Storage | 5 GB/project | ~5 × 30-min 720p recordings, then prune |
+| Vercel bandwidth | 100 GB/mo | Transcript payloads are KBs; media bypasses Vercel (direct-to-storage) |
+| Upstash | 10k cmds/day | ~2–3 rate-limit checks per request + retry-queue traffic |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Repository map
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Doc | Purpose |
+|---|---|
+| [`AGENTS.md`](./AGENTS.md) | **AI context hub** — rules, verified facts, references. Read first. |
+| [`synthetix-engine-prd.md`](./docs/synthetix-engine-prd.md) | Product requirements, P0/P1/P2, metrics, non-goals |
+| [`architecture.md`](./docs/architecture.md) | System design, ADRs, budgets, failure modes |
+| [`realtime-media-pipeline.md`](./docs/realtime-media-pipeline.md) | Capture → VAD → Groq → captions → recording flow |
+| [`database-and-security.md`](./docs/database-and-security.md) | Schema, indexes, auth hardening, secrets, threats |
+| [`rooms-roles-and-rbac.md`](./docs/rooms-roles-and-rbac.md) | Roles, permission matrix, moderation, room lifecycle |
+| [`design-spec.md`](./docs/design-spec.md) | Design tokens, layout, states, accessibility |
+| [`nextjs-conventions.md`](./docs/nextjs-conventions.md) | App Router rules for this codebase |
+| [`code-complexity-and-quality.md`](./docs/code-complexity-and-quality.md) | Complexity budgets, tests, CI gates, DoD |
+| [`pull-request-guidelines.md`](./docs/pull-request-guidelines.md) | PR size, checklist, merge rules |
+| [`GITFLOW.md`](./docs/GITFLOW.md) | Trunk-based branching + Neon preview branches |
+| [`subagent-team.md`](./docs/subagent-team.md) | How AI agents collaborate on this repo |
+| [`BLUEPRINT-ORIGINAL.md`](./docs/BLUEPRINT-ORIGINAL.md) | Raw original idea — superseded by these docs (see errata) |
 
-## Deploy on Vercel
+## Quickstart
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+# 1. Prereqs: Node 20+, a Neon project, LiveKit project, Groq key, Upstash store
+cp .env.example .env.local   # fill in values
+npm install                  # already done if scaffolded
+npm run dev                  # http://localhost:3000
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Feature implementation is gated on plan approval — start with [`AGENTS.md`](./AGENTS.md) → Phase 2.
+
+## Implementation status
+
+| Phase | Deliverable | Status |
+|---|---|---|
+| 0 | Engineering doc set (this repo) | ✅ |
+| 1 | Next.js scaffold + deps + env template | ✅ |
+| 2 | Auth (Better Auth) + Prisma schema on Neon | ⬜ |
+| 3 | Rooms: create/join + LiveKit token issuance | ⬜ |
+| 4 | Studio UI: video grid, controls, transcript rail | ⬜ |
+| 5 | STT pipeline: worklet → VAD → Groq → DataChannel | ⬜ |
+| 6 | Recording: MediaRecorder → multipart presigned upload | ⬜ |
+| 7 | Quota guards, rate limits, error/empty states | ⬜ |
+| 8 | Tests, CI, README demo GIF | ⬜ |
+
+## Errata vs the original blueprint
+
+`BLUEPRINT-ORIGINAL.md` is kept for provenance. These corrections are binding:
+
+| # | Original claim | Correction |
+|---|---|---|
+| 1 | LiveKit free = "1k participant-minutes" | **5,000** participant-min/mo + 100 concurrent + 50 GB downstream (hard caps) — [LiveKit quotas](https://docs.livekit.io/deploy/admin/quotas-and-limits/) |
+| 2 | Slice PCM into **2-second** `.wav` chunks | Infeasible: 20 RPM can't sustain realtime at 2 s chunks (needs 30 RPM), and min-10 s billing burns the daily budget in **~67 min audio**. Use **VAD chunks, 8–12 s, active speaker only** |
+| 3 | Groq called from the browser | **Never.** Key is server-only; browser posts to `/api/stt/transcribe` |
+| 4 | `Recording.fileUrl` stored in DB | Presigned URLs expire. Store `storageKey` only; sign GET on read after authz |
+| 5 | Neon storage endpoint `us-east-1` | Beta/GA launched in **us-east-2 (Ohio)** — copy the endpoint from your Neon console |
+| 6 | `tailwind.config.js` in repo layout | Tailwind v4 config lives in `app/globals.css` (`@theme`) — no JS config file |
+| 7 | Full DSP chain (EQ/noise-cancel/gain) in worklet | Cut: browsers ship WebRTC APM via `getUserMedia` constraints. Worklet does **level metering + VAD only** |
