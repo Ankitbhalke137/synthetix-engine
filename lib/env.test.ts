@@ -11,6 +11,7 @@ const VALID_ENV = {
   NEON_STORAGE_SECRET_ACCESS_KEY: "secret",
   LIVEKIT_API_KEY: "lk-key",
   LIVEKIT_API_SECRET: "lk-secret",
+  NEXT_PUBLIC_LIVEKIT_URL: "wss://test.livekit.cloud",
   GROQ_API_KEY: "groq-key",
   UPSTASH_REDIS_REST_URL: "http://localhost:8079",
   UPSTASH_REDIS_REST_TOKEN: "token",

@@ -11,6 +11,7 @@ const TEST_ENV: Record<string, string> = {
   NEON_STORAGE_REGION: "us-east-2",
   LIVEKIT_API_KEY: "test-livekit-key",
   LIVEKIT_API_SECRET: "test-livekit-secret",
+  NEXT_PUBLIC_LIVEKIT_URL: "wss://test.livekit.cloud",
   GROQ_API_KEY: "test-groq-key",
   UPSTASH_REDIS_REST_URL: "http://localhost:8079",
   UPSTASH_REDIS_REST_TOKEN: "test-upstash-token",
