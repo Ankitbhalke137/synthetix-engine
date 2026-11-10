@@ -95,7 +95,7 @@ Feature implementation is gated on plan approval — start with [`AGENTS.md`](./
 |---|---|---|
 | 0 | Engineering doc set (this repo) | ✅ |
 | 1 | Next.js scaffold + deps + env template | ✅ |
-| 2 | Auth (Better Auth) + Prisma schema on Neon | ⬜ |
+| 2 | Auth (Better Auth) + Prisma schema on Neon | 🟨 code complete — migration pending `DATABASE_URL` |
 | 3 | Rooms: create/join + LiveKit token issuance | ⬜ |
 | 4 | Studio UI: video grid, controls, transcript rail | ⬜ |
 | 5 | STT pipeline: worklet → VAD → Groq → DataChannel | ⬜ |

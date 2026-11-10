@@ -41,21 +41,21 @@ App tables (snake_case): `rooms`, `room_participants`, `transcripts`, `recording
 
 ## 3. Auth configuration (Better Auth)
 
-```ts
-// lib/auth.ts — spec (Phase 2)
-export const auth = betterAuth({
-  database: prismaAdapter(prisma, { provider: "postgresql" }),
-  emailAndPassword: { enabled: true, minPasswordLength: 10 },
-  session: {
-    expiresIn: 60 * 60 * 24 * 7,       // 7 days
-    updateAge: 60 * 60 * 24,           // rolling refresh
-    cookieCache: { enabled: true, maxAge: 60 * 5 },
-  },
-  // socialProviders.github → P1 (PRD)
-  rateLimit: { enabled: true, window: 10, max: 10 }, // login brute-force
-  advanced: { useSecureCookies: process.env.NODE_ENV === "production" },
-});
-```
+Implemented in `lib/auth.ts` as a **lazy `getAuth()` singleton** — created on the first auth request, never at import, so `next build` works without secrets.
+
+Key settings (see the file for the source of truth):
+
+| Setting | Value | Why |
+|---|---|---|
+| `baseURL` / `secret` | from `getEnv()` | validated at boot (database-and-security §4) |
+| `emailAndPassword` | enabled, min length 10 | P0-1; GitHub OAuth stays P1 |
+| `session.expiresIn` / `updateAge` | 7 days / 1 day | rolling sessions |
+| `session.cookieCache` | 5 min | fewer DB round-trips per request |
+| `rateLimit` | 10 req / 10 s (per IP) | login brute-force guard |
+| `advanced.useSecureCookies` | prod only | `localhost` over http in dev |
+| `plugins: [nextCookies()]` | required | lets server actions set/clear cookies |
+
+Route mount: `app/api/auth/[...all]/route.ts` uses `toNextJsHandler` with a **lazy function** (no instance at module scope) and `export const dynamic = "force-dynamic"`.
 
 Hardening rules:
 - `BETTER_AUTH_SECRET` = ≥ 32 random bytes (`openssl rand -base64 32`); rotate on leak; never commit.
