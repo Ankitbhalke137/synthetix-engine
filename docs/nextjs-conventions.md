@@ -85,6 +85,7 @@ export async function POST(req: Request) {
 ```
 
 - **Pick runtime deliberately:** `nodejs` default for Prisma/AWS SDK; `edge` only for pure-JS middleware-like work (Prisma does not run there).
+- **Cache Components is enabled** (`next.config.ts`): route handlers are dynamic by default — `export const dynamic = "force-dynamic"` is **rejected at build** (`incompatible with nextConfig.cacheComponents`). Don't add it.
 - Never stream large bodies through handlers (uploads go presigned — ADR-005).
 - Auth catch-all `app/api/auth/[...all]/route.ts` is generated glue — do not add custom logic there.
 

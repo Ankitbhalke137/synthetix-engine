@@ -138,7 +138,7 @@ npx prisma generate    # already runs via postinstall
 |---|---|---|
 | 0 | Engineering doc set | ✅ |
 | 1 | Scaffold + deps + `.env.example` + docs | ✅ |
-| 2 | Auth + Prisma schema on Neon | ⬜ |
+| 2 | Auth + Prisma schema on Neon | 🟨 code complete — migration pending `DATABASE_URL` |
 | 3 | Rooms + LiveKit tokens (role claims) | ⬜ |
 | 4 | Studio UI (design-spec states) | ⬜ |
 | 5 | STT pipeline (VAD → Groq → DataChannel) | ⬜ |

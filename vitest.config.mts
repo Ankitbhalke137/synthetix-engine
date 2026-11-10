@@ -5,6 +5,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "."),
+      // Vitest runs outside the React Server Component bundler, where the
+      // real `server-only` package throws by design.
+      "server-only": path.resolve(import.meta.dirname, "tests/mocks/server-only.ts"),
     },
   },
   test: {
