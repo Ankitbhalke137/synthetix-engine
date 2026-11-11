@@ -27,6 +27,7 @@
     "@prisma/client": "^7.10.1",
     "@upstash/ratelimit": "^2.2.0",
     "@upstash/redis": "^1.41.0",
+    "@vercel/speed-insights": "^2.1.0",
     "better-auth": "^1.7.19",
     "livekit-client": "^2.23.0",
     "livekit-server-sdk": "^2.19.3",
