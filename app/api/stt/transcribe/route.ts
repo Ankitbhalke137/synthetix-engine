@@ -2,17 +2,18 @@ import { z } from "zod";
 
 import { getPrisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { DataPacket_Kind, RoomServiceClient } from "livekit-server-sdk";
 
 /**
  * Server-side STT proxy. The browser never touches Groq: it posts a WAV chunk
  * here, this route authenticates + checks room membership, calls Groq
- * whisper-large-v3-turbo with the server key, persists the caption, and returns
- * the text. Never logs audio contents, never returns GROQ_API_KEY.
+ * whisper-large-v3-turbo with the server key, persists the caption, broadcasts
+ * it to the room via LiveKit DataChannel, and returns the text. Never logs
+ * audio contents, never returns GROQ_API_KEY.
  */
 const CaptionRequestSchema = z
   .object({
     roomId: z.string().uuid("Invalid room id."),
-    seq: z.number().int().nonnegative("Sequence must be a non-negative integer."),
   })
   .strict();
 
@@ -21,6 +22,11 @@ const NO_STORE = { "cache-control": "no-store" } as const;
 const GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const GROQ_MODEL = "whisper-large-v3-turbo";
 const MAX_CHUNK_BYTES = 2 * 1024 * 1024; // 2 MB — well under Groq's 25 MB cap
+
+const livekitHost = process.env.NEXT_PUBLIC_LIVEKIT_URL?.replace(/^wss:/, "https:");
+const roomService = livekitHost
+  ? new RoomServiceClient(livekitHost)
+  : null;
 
 function errorResponse(status: number, code: string, message: string): Response {
   return Response.json({ error: { code, message } }, { status, headers: NO_STORE });
@@ -40,11 +46,10 @@ export async function POST(request: Request): Promise<Response> {
 
   const parsed = CaptionRequestSchema.safeParse({
     roomId: formData.get("roomId"),
-    seq: Number(formData.get("seq")),
   });
 
   if (!parsed.success) {
-    return errorResponse(400, "INVALID_INPUT", "Expected { roomId, seq, chunk }.");
+    return errorResponse(400, "INVALID_INPUT", "Expected { roomId, chunk }.");
   }
 
   const chunk = formData.get("chunk");
@@ -115,16 +120,21 @@ export async function POST(request: Request): Promise<Response> {
   const text = transcript?.text?.trim() ?? "";
   const segments = transcript?.segments ?? [];
 
-  // Persist idempotently — retried chunks cannot duplicate a caption row
-  // (@@unique([roomId, seq])). DB failure must not fail the request.
+  // Server-assigned monotonic seq per room (unique constraint @@unique([roomId, seq])).
+  const [{ maxSeq }] = await getPrisma().$queryRaw<{ maxSeq: number | null }[]>`
+    SELECT COALESCE(MAX("seq"), 0) as "maxSeq" FROM "transcripts" WHERE "roomId" = ${parsed.data.roomId}
+  `;
+  const seq = (maxSeq ?? 0) + 1;
+
   const startMs = Math.round((segments[0]?.start ?? 0) * 1000);
   const endMs = Math.round((segments[segments.length - 1]?.end ?? 0) * 1000);
 
-  await getPrisma()
+  // Persist idempotently — DB failure must not fail the request.
+  const transcriptRow = await getPrisma()
     .transcript.create({
       data: {
         roomId: parsed.data.roomId,
-        seq: parsed.data.seq,
+        seq,
         speakerId: session.user.id,
         speaker: participant.displayName,
         text,
@@ -133,12 +143,51 @@ export async function POST(request: Request): Promise<Response> {
       },
     })
     .catch((error) => {
-      // Idempotency: a duplicate seq is expected on retries — ignore it.
       if (typeof error === "object" && error !== null && Reflect.get(error, "code") === "P2002") {
-        return;
+        // Duplicate seq on retry — return the existing row.
+        return getPrisma().transcript.findUnique({
+          where: { roomId_seq: { roomId: parsed.data.roomId, seq } },
+        });
       }
       console.error("caption persist failed:", error);
+      return null;
     });
+
+  if (!transcriptRow) {
+    return errorResponse(500, "STT_PERSIST", "Could not persist caption.");
+  }
+
+  // Broadcast to the room via LiveKit DataChannel (server-authored, clients render only these).
+  if (roomService && text) {
+    const room = await getPrisma().room.findUnique({
+      where: { id: parsed.data.roomId },
+      select: { slug: true },
+    });
+
+    const frame = {
+      v: 1,
+      type: "caption",
+      roomId: parsed.data.roomId,
+      seq,
+      speakerId: session.user.id,
+      speaker: participant.displayName,
+      text,
+      startMs,
+      endMs: endMs > startMs ? endMs : startMs + 1,
+    };
+
+    try {
+      await roomService.sendData(
+        room?.slug ?? "",
+        new TextEncoder().encode(JSON.stringify(frame)),
+        DataPacket_Kind.RELIABLE,
+        {},
+      );
+    } catch {
+      // Broadcast failure must not fail the request — the client can still
+      // render from the proxy response, and the row is persisted.
+    }
+  }
 
   return Response.json(
     {
@@ -148,7 +197,7 @@ export async function POST(request: Request): Promise<Response> {
       segments,
       speaker: participant.displayName,
       speakerId: session.user.id,
-      seq: parsed.data.seq,
+      seq,
     },
     { status: 200, headers: NO_STORE },
   );
