@@ -120,6 +120,8 @@ export function useStudioRoom(
     startMs: number;
     endMs: number;
   }) => void,
+  /** Present for signed-out guests; the token route turns it into an identity. */
+  guestDisplayName?: string,
 ) {
   const router = useRouter();
   const roomRef = useRef<Room | null>(null);
@@ -253,7 +255,9 @@ export function useStudioRoom(
         const response = await fetch("/api/livekit/token", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ slug }),
+          body: JSON.stringify(
+            guestDisplayName ? { slug, displayName: guestDisplayName } : { slug },
+          ),
         });
 
         if (!response.ok) {
@@ -323,7 +327,7 @@ export function useStudioRoom(
       roomRef.current = null;
       void room.disconnect();
     };
-  }, [slug, attempt, preferences.camera, preferences.microphone]);
+  }, [slug, attempt, preferences.camera, preferences.microphone, guestDisplayName]);
 
   const retry = useCallback(() => {
     setError(null);
@@ -337,9 +341,9 @@ export function useStudioRoom(
   const leave = useCallback(async () => {
     leavingRef.current = true;
     await roomRef.current?.disconnect().catch(() => undefined);
-    router.push("/dashboard");
+    router.push(guestDisplayName ? "/" : "/dashboard");
     router.refresh();
-  }, [router]);
+  }, [router, guestDisplayName]);
 
   /** Local mute/camera are optimistic only at the UI level; LiveKit is truth. */
   const toggleDevice = useCallback(async (device: "microphone" | "camera") => {

@@ -11,15 +11,32 @@ import type { StudioPreferences } from "./useStudioRoom";
 export function StudioRoom({
   room,
   viewer,
+  guestDisplayName,
 }: {
   room: { id: string; slug: string; name: string };
   viewer: { name: string; role: Role };
+  /** Present only for signed-out guests; sent with the token request. */
+  guestDisplayName?: string;
 }) {
   const [preferences, setPreferences] = useState<StudioPreferences | null>(null);
 
   if (!preferences) {
-    return <PrejoinScreen room={room} viewer={viewer} onJoin={setPreferences} />;
+    return (
+      <PrejoinScreen
+        room={room}
+        viewer={viewer}
+        onJoin={setPreferences}
+        backHref={guestDisplayName ? "/" : "/dashboard"}
+      />
+    );
   }
 
-  return <StudioSession room={room} viewer={viewer} preferences={preferences} />;
+  return (
+    <StudioSession
+      room={room}
+      viewer={viewer}
+      preferences={preferences}
+      guestDisplayName={guestDisplayName}
+    />
+  );
 }

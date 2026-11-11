@@ -66,6 +66,7 @@ const TokenResponseSchema = z.object({
   token: z.string().min(20),
   url: z.url(),
   room: z.object({ slug: z.string(), name: z.string() }),
+  roomId: z.string(),
   role: z.enum(["host", "moderator", "participant", "viewer"]),
   identity: z.string(),
 });
@@ -101,6 +102,36 @@ describe("POST /api/livekit/token", () => {
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({ error: { code: "UNAUTHENTICATED" } });
     expect(admitParticipant).not.toHaveBeenCalled();
+  });
+
+  it("admits a guest with a display name without a session", async () => {
+    vi.mocked(getSession).mockResolvedValue(null);
+    vi.mocked(admitParticipant).mockResolvedValue(
+      admitted({
+        participant: {
+          id: "p_guest",
+          roomId: "room_1",
+          userId: null,
+          displayName: "Marcus",
+          role: "participant",
+        },
+        role: "participant",
+        identity: "guest:p_guest",
+      }),
+    );
+
+    const response = await POST(post({ slug: "design-review-abc123", displayName: " Marcus " }));
+
+    expect(response.status).toBe(200);
+    expect(admitParticipant).toHaveBeenCalledWith(expect.anything(), {
+      slug: "design-review-abc123",
+      displayName: "Marcus",
+    });
+
+    const body = TokenResponseSchema.parse(await response.json());
+    expect(body.role).toBe("participant");
+    expect(body.identity).toBe("guest:p_guest");
+    expect(payloadOf(body.token).sub).toBe("guest:p_guest");
   });
 
   it("rejects malformed JSON and non-slug values", async () => {

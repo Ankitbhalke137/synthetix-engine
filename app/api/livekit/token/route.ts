@@ -9,6 +9,10 @@ import { getSession } from "@/lib/session";
  * Token minting is the only way into a LiveKit room (RBAC doc §3), so this
  * handler is the room's front door: authenticate → admit (membership + state)
  * → sign grants. The body can name a room but can never claim a role.
+ *
+ * Signed-in users are identified by their session. A visitor without an
+ * account may join as a guest by supplying a display name (RBAC doc §4);
+ * their identity is derived from the persisted participant row.
  */
 const JoinRequestSchema = z
   .object({
@@ -18,6 +22,7 @@ const JoinRequestSchema = z
       .min(3)
       .max(64)
       .regex(/^[a-z0-9-]+$/, "Invalid room slug."),
+    displayName: z.string().trim().min(2).max(40).optional(),
   })
   .strict();
 
@@ -37,11 +42,6 @@ function errorResponse(status: number, code: string, message: string): Response 
 export async function POST(request: Request): Promise<Response> {
   const session = await getSession(request.headers);
 
-  if (!session) {
-    // Guests get their own endpoint with the studio join flow (Phase 4).
-    return errorResponse(401, "UNAUTHENTICATED", "Sign in to join a room.");
-  }
-
   const body: unknown = await request.json().catch(() => null);
   const parsed = JoinRequestSchema.safeParse(body);
 
@@ -49,10 +49,17 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse(400, "INVALID_INPUT", "Expected { slug } with a valid room slug.");
   }
 
+  // No session and no name means the visitor has not chosen a guest identity.
+  if (!session && !parsed.data.displayName) {
+    return errorResponse(401, "UNAUTHENTICATED", "Enter a display name to join as a guest.");
+  }
+
   try {
     const admission = await admitParticipant(prismaRoomStore(getPrisma()), {
       slug: parsed.data.slug,
-      user: { id: session.user.id, name: session.user.name },
+      ...(session
+        ? { user: { id: session.user.id, name: session.user.name } }
+        : { displayName: parsed.data.displayName }),
     });
 
     const token = await mintRoomToken({
