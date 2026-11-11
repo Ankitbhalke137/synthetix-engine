@@ -1,0 +1,202 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ConnectionState, Room, RoomEvent, Track, type Participant } from "livekit-client";
+
+import { parseRole, type Role } from "@/lib/room-policy";
+
+export type StudioStatus = "connecting" | "connected" | "reconnecting" | "error";
+
+export type StudioParticipant = {
+  identity: string;
+  name: string;
+  isLocal: boolean;
+  role: Role | null;
+  isSpeaking: boolean;
+  isMicrophoneEnabled: boolean;
+  isCameraEnabled: boolean;
+  videoTrack: Track | null;
+  audioTrack: Track | null;
+};
+
+type TokenResponse = { token: string; url: string };
+
+/** Token metadata is opaque JSON set at mint time (lib/room-policy.ts). */
+function roleFromMetadata(metadata: string | undefined): Role | null {
+  if (!metadata) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(metadata);
+    if (typeof parsed !== "object" || parsed === null) return null;
+
+    const role = Reflect.get(parsed, "role");
+    return typeof role === "string" ? parseRole(role) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Current room roster, local participant first. Re-read after every event. */
+function snapshot(room: Room): StudioParticipant[] {
+  const local = room.localParticipant;
+  const everyone: Participant[] = [local, ...room.remoteParticipants.values()];
+
+  return everyone
+    .map((participant) => ({
+      identity: participant.identity,
+      name: participant.name || participant.identity,
+      isLocal: participant === local,
+      role: roleFromMetadata(participant.metadata),
+      isSpeaking: participant.isSpeaking,
+      isMicrophoneEnabled: participant.isMicrophoneEnabled,
+      isCameraEnabled: participant.isCameraEnabled,
+      videoTrack: participant.getTrackPublication(Track.Source.Camera)?.track ?? null,
+      audioTrack: participant.getTrackPublication(Track.Source.Microphone)?.track ?? null,
+    }))
+    .sort((a, b) => Number(b.isLocal) - Number(a.isLocal));
+}
+
+function messageFrom(payload: unknown): string {
+  if (typeof payload === "object" && payload !== null) {
+    const error = Reflect.get(payload, "error");
+
+    if (typeof error === "object" && error !== null) {
+      const message = Reflect.get(error, "message");
+      if (typeof message === "string") return message;
+    }
+  }
+
+  return "Could not join this room.";
+}
+
+/**
+ * Owns the LiveKit connection for one studio session: token fetch → connect →
+ * event-driven roster → cleanup. The room is disconnected on unmount and on
+ * retry, so a failed join never leaves a dangling socket.
+ */
+export function useStudioRoom(slug: string) {
+  const router = useRouter();
+  const roomRef = useRef<Room | null>(null);
+  const leavingRef = useRef(false);
+  const [status, setStatus] = useState<StudioStatus>("connecting");
+  const [error, setError] = useState<string | null>(null);
+  const [mediaBlocked, setMediaBlocked] = useState(false);
+  const [participants, setParticipants] = useState<StudioParticipant[]>([]);
+  const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let disposed = false;
+    const room = new Room({ adaptiveStream: true, dynacast: true });
+    roomRef.current = room;
+    leavingRef.current = false;
+
+    const sync = () => {
+      if (!disposed) setParticipants(snapshot(room));
+    };
+
+    const onState = (state: ConnectionState) => {
+      if (disposed) return;
+
+      if (state === ConnectionState.Connected) {
+        setStatus("connected");
+        sync();
+      } else if (state === ConnectionState.Connecting) {
+        setStatus("connecting");
+      } else if (
+        state === ConnectionState.Reconnecting ||
+        state === ConnectionState.SignalReconnecting
+      ) {
+        setStatus("reconnecting");
+      }
+    };
+
+    const onSpeakers = (speakers: Participant[]) => {
+      if (disposed) return;
+      setActiveSpeaker(speakers[0]?.identity ?? null);
+      sync();
+    };
+
+    const onDisconnected = () => {
+      if (disposed || leavingRef.current) return;
+      setStatus("error");
+      setError("The connection ended. Rejoin when you are ready.");
+    };
+
+    room.on(RoomEvent.ConnectionStateChanged, onState);
+    room.on(RoomEvent.ParticipantConnected, sync);
+    room.on(RoomEvent.ParticipantDisconnected, sync);
+    room.on(RoomEvent.TrackSubscribed, sync);
+    room.on(RoomEvent.TrackUnsubscribed, sync);
+    room.on(RoomEvent.TrackMuted, sync);
+    room.on(RoomEvent.TrackUnmuted, sync);
+    room.on(RoomEvent.LocalTrackPublished, sync);
+    room.on(RoomEvent.LocalTrackUnpublished, sync);
+    room.on(RoomEvent.ActiveSpeakersChanged, onSpeakers);
+    room.on(RoomEvent.Disconnected, onDisconnected);
+
+    async function start() {
+      try {
+        const response = await fetch("/api/livekit/token", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ slug }),
+        });
+
+        if (!response.ok) {
+          throw new Error(messageFrom(await response.json().catch(() => null)));
+        }
+
+        const { token, url } = (await response.json()) as TokenResponse;
+        if (disposed) return;
+
+        await room.connect(url, token);
+        if (disposed) return;
+        setStatus("connected");
+
+        // Publish by default for now; the pre-join screen moves this choice to
+        // the user in the next slice. A denial must not drop the connection.
+        const media = await Promise.allSettled([
+          room.localParticipant.setCameraEnabled(true),
+          room.localParticipant.setMicrophoneEnabled(true),
+        ]);
+
+        if (disposed) return;
+        if (media.some((result) => result.status === "rejected")) setMediaBlocked(true);
+        sync();
+      } catch (cause) {
+        if (disposed) return;
+        setStatus("error");
+        setError(cause instanceof Error ? cause.message : "Could not join this room.");
+      }
+    }
+
+    void start();
+
+    return () => {
+      disposed = true;
+      room.removeAllListeners();
+      roomRef.current = null;
+      void room.disconnect();
+    };
+  }, [slug, attempt]);
+
+  const retry = useCallback(() => {
+    setError(null);
+    setMediaBlocked(false);
+    setStatus("connecting");
+    setActiveSpeaker(null);
+    setParticipants([]);
+    setAttempt((current) => current + 1);
+  }, []);
+
+  const leave = useCallback(async () => {
+    leavingRef.current = true;
+    await roomRef.current?.disconnect().catch(() => undefined);
+    router.push("/dashboard");
+    router.refresh();
+  }, [router]);
+
+  return { status, error, mediaBlocked, participants, activeSpeaker, retry, leave };
+}

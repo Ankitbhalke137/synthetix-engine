@@ -30,6 +30,13 @@ const COPY = {
   },
 } as const;
 
+/** Only internal paths are honoured, so `?next=` can never redirect off-site. */
+function nextDestination(): string {
+  const next = new URLSearchParams(window.location.search).get("next");
+
+  return next?.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+}
+
 function fieldErrorsFrom(issues: { path: PropertyKey[]; message: string }[]): FieldErrors {
   const errors: FieldErrors = {};
 
@@ -94,7 +101,7 @@ export function AuthForm() {
         return;
       }
 
-      router.replace("/dashboard");
+      router.replace(nextDestination());
       router.refresh();
     } catch {
       setFormError("Network error — check your connection and try again.");
