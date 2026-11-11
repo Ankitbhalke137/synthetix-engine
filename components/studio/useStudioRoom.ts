@@ -104,6 +104,7 @@ export function useStudioRoom(slug: string, preferences: StudioPreferences) {
   const [status, setStatus] = useState<StudioStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [mediaBlocked, setMediaBlocked] = useState(false);
+  const [mediaBusy, setMediaBusy] = useState(false);
   const [participants, setParticipants] = useState<StudioParticipant[]>([]);
   const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -227,5 +228,48 @@ export function useStudioRoom(slug: string, preferences: StudioPreferences) {
     router.refresh();
   }, [router]);
 
-  return { status, error, mediaBlocked, participants, activeSpeaker, retry, leave };
+  /** Local mute/camera are optimistic only at the UI level; LiveKit is truth. */
+  const toggleDevice = useCallback(async (device: "microphone" | "camera") => {
+    const room = roomRef.current;
+    if (!room) return;
+
+    setMediaBusy(true);
+
+    try {
+      if (device === "microphone") {
+        await room.localParticipant.setMicrophoneEnabled(
+          !room.localParticipant.isMicrophoneEnabled,
+        );
+      } else {
+        await room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled);
+      }
+
+      setParticipants(snapshot(room));
+    } catch {
+      setMediaBlocked(true);
+    } finally {
+      setMediaBusy(false);
+    }
+  }, []);
+
+  const toggleMicrophone = useCallback(() => {
+    void toggleDevice("microphone");
+  }, [toggleDevice]);
+
+  const toggleCamera = useCallback(() => {
+    void toggleDevice("camera");
+  }, [toggleDevice]);
+
+  return {
+    status,
+    error,
+    mediaBlocked,
+    mediaBusy,
+    participants,
+    activeSpeaker,
+    retry,
+    leave,
+    toggleMicrophone,
+    toggleCamera,
+  };
 }
