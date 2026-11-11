@@ -3,7 +3,8 @@
 import Link from "next/link";
 
 import type { Role } from "@/lib/room-policy";
-import { useStudioRoom, type StudioParticipant } from "./useStudioRoom";
+import { useStudioRoom } from "./useStudioRoom";
+import { VideoGrid } from "./VideoGrid";
 
 const ROLE_LABEL: Record<Role, string> = {
   host: "Host",
@@ -19,41 +20,6 @@ const STATUS_COPY = {
   error: "Not connected",
 } as const;
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2);
-
-  return parts.map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
-}
-
-function PresenceCard({ participant }: { participant: StudioParticipant }) {
-  return (
-    <li className="flex items-center gap-3 rounded-panel border border-border bg-surface p-4">
-      <span
-        aria-hidden
-        className="grid size-11 shrink-0 place-items-center rounded-full bg-surface-2 font-mono text-sm font-semibold"
-      >
-        {initials(participant.name)}
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium">
-          {participant.name}
-          {participant.isLocal ? <span className="text-text-muted"> (you)</span> : null}
-        </p>
-        <p className="mt-0.5 text-xs text-text-muted">
-          {participant.role ? `${ROLE_LABEL[participant.role]} · ` : null}
-          Mic {participant.isMicrophoneEnabled ? "on" : "off"} · Camera{" "}
-          {participant.isCameraEnabled ? "on" : "off"}
-        </p>
-      </div>
-      {participant.isSpeaking ? (
-        <span className="ml-auto font-mono text-[11px] tracking-[0.06em] text-ok uppercase">
-          Speaking
-        </span>
-      ) : null}
-    </li>
-  );
-}
-
 export function StudioRoom({
   room,
   viewer,
@@ -61,7 +27,8 @@ export function StudioRoom({
   room: { slug: string; name: string };
   viewer: { name: string; role: Role };
 }) {
-  const { status, error, mediaBlocked, participants, retry, leave } = useStudioRoom(room.slug);
+  const { status, error, mediaBlocked, participants, activeSpeaker, retry, leave } =
+    useStudioRoom(room.slug);
 
   return (
     <div className="flex h-dvh flex-col bg-bg">
@@ -91,7 +58,7 @@ export function StudioRoom({
               {STATUS_COPY[status]}
             </span>
             {status === "connected" ? (
-              <span className="text-text-muted">
+              <span className="text-text-muted" aria-live="polite">
                 · {participants.length} {participants.length === 1 ? "person" : "people"}
               </span>
             ) : null}
@@ -140,26 +107,8 @@ export function StudioRoom({
               </Link>
             </div>
           </div>
-        ) : participants.length === 0 ? (
-          <div className="grid h-full place-items-center">
-            <p className="text-sm text-text-muted">
-              {status === "reconnecting" ? "Reconnecting…" : "Connecting to the room…"}
-            </p>
-          </div>
         ) : (
-          <section aria-label="People in this room" className="mx-auto max-w-3xl">
-            <h2 className="text-xs font-semibold tracking-[0.06em] text-text-muted uppercase">
-              In the room
-            </h2>
-            <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-              {participants.map((participant) => (
-                <PresenceCard key={participant.identity} participant={participant} />
-              ))}
-            </ul>
-            <p className="mt-6 text-sm text-text-muted">
-              Video tiles, the control bar and the transcript rail arrive in the next slices.
-            </p>
-          </section>
+          <VideoGrid participants={participants} activeSpeaker={activeSpeaker} status={status} />
         )}
       </main>
     </div>

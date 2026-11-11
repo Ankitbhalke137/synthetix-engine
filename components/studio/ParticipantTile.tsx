@@ -1,0 +1,103 @@
+"use client";
+
+import type { StudioParticipant } from "./useStudioRoom";
+import { AttachedAudio, AttachedVideo } from "./MediaTrack";
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+
+  return parts.map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
+}
+
+/** Deterministic hue so the same identity keeps the same avatar colour. */
+function hueFor(identity: string): number {
+  let hash = 0;
+
+  for (const character of identity) {
+    hash = (hash * 31 + character.charCodeAt(0)) % 360;
+  }
+
+  return hash;
+}
+
+function MicIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 20 20"
+      className="size-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10 3.2a2.1 2.1 0 0 0-2.1 2.1v3.2a2.1 2.1 0 1 0 4.2 0V5.3A2.1 2.1 0 0 0 10 3.2Z" />
+      <path d="M5.9 9.4a4.1 4.1 0 0 0 8.2 0M10 13.5v3.2" />
+      {muted ? <path d="M4.5 4.5l11 11" /> : null}
+    </svg>
+  );
+}
+
+export function ParticipantTile({
+  participant,
+  promoted,
+}: {
+  participant: StudioParticipant;
+  promoted: boolean;
+}) {
+  const showVideo = participant.isCameraEnabled && participant.videoTrack !== null;
+
+  return (
+    <article
+      aria-label={`${participant.name}${participant.isLocal ? " (you)" : ""} — microphone ${
+        participant.isMicrophoneEnabled ? "on" : "muted"
+      }, camera ${participant.isCameraEnabled ? "on" : "off"}`}
+      className={`relative aspect-video overflow-hidden rounded-panel border border-border bg-black transition-shadow duration-150 ease-out ${
+        participant.isSpeaking ? "shadow-[0_0_0_2px_var(--color-ok)]" : ""
+      } ${promoted ? "sm:col-span-2" : ""}`}
+    >
+      {showVideo && participant.videoTrack ? (
+        <AttachedVideo track={participant.videoTrack} mirrored={participant.isLocal} />
+      ) : (
+        <div className="grid h-full place-items-center">
+          <span
+            aria-hidden
+            className="grid size-16 place-items-center rounded-full font-mono text-lg font-semibold text-text"
+            style={{ backgroundColor: `oklch(0.34 0.07 ${hueFor(participant.identity)})` }}
+          >
+            {initials(participant.name)}
+          </span>
+        </div>
+      )}
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-linear-to-t from-black/80 to-transparent px-3 pt-8 pb-2.5">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-sm font-medium text-text">
+            {participant.name}
+            {participant.isLocal ? <span className="text-text-muted"> (you)</span> : null}
+          </span>
+          {participant.isSpeaking ? (
+            <span className="shrink-0 font-mono text-[10px] tracking-[0.06em] text-ok uppercase">
+              Speaking
+            </span>
+          ) : null}
+        </span>
+        <span
+          aria-hidden
+          className={`shrink-0 rounded-control border p-1 ${
+            participant.isMicrophoneEnabled
+              ? "border-white/20 text-text"
+              : "border-danger/50 bg-danger/20 text-danger"
+          }`}
+        >
+          <MicIcon muted={!participant.isMicrophoneEnabled} />
+        </span>
+      </div>
+
+      {!participant.isLocal && participant.audioTrack ? (
+        <AttachedAudio track={participant.audioTrack} />
+      ) : null}
+    </article>
+  );
+}
