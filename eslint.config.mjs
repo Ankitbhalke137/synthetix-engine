@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Prisma 7 generated client (recreated by postinstall):
     "generated/**",
+    // Local GitNexus index and agent tooling (gitignored, not app code):
+    ".gitnexus/**",
   ]),
 ]);
 
