@@ -18,17 +18,23 @@ export type CaptionEntry = {
  * useCaptionStream — captures the local mic, runs the VAD worklet, posts WAV
  * chunks to /api/stt/transcribe, and feeds captions back via onCaption.
  *
- * The mic stream is owned here (started on mount, stopped on unmount). The
- * worklet never touches the main thread with PCM; it only posts meter RMS
+ * The mic stream is owned here (started while `enabled`, stopped otherwise).
+ * The worklet never touches the main thread with PCM; it only posts meter RMS
  * and finished WAV chunks. Permission denial is silent — captions stay off
  * and the call continues.
+ *
+ * `enabled` must reflect real user intent (captions open AND the local mic is
+ * live). Capturing unconditionally would prompt for the mic a second time and
+ * keep transcribing audio the user believes is muted.
  */
 export function useCaptionStream({
   roomId,
+  enabled,
   onCaption,
   onMeter,
 }: {
   roomId: string;
+  enabled: boolean;
   onCaption: (entry: CaptionEntry) => void;
   onMeter?: (rms: number) => void;
 }) {
@@ -36,16 +42,18 @@ export function useCaptionStream({
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const runningRef = useRef(false);
   const mountedRef = useRef(true);
 
   const stop = useCallback(() => {
+    runningRef.current = false;
     sourceRef.current?.disconnect();
     sourceRef.current = null;
     workletNodeRef.current?.disconnect();
     workletNodeRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
-    audioCtxRef.current?.close();
+    void audioCtxRef.current?.close().catch(() => undefined);
     audioCtxRef.current = null;
   }, []);
 
@@ -56,6 +64,10 @@ export function useCaptionStream({
       const form = new FormData();
       const blob = new Blob([audio], { type: "audio/wav" });
       form.append("roomId", roomId);
+      // The chunk's position on the session timeline. The server prefers these
+      // over Whisper's chunk-relative segment offsets.
+      form.append("startMs", String(startMs));
+      form.append("endMs", String(endMs));
       form.append("chunk", blob, "chunk.wav");
 
       try {
@@ -66,13 +78,8 @@ export function useCaptionStream({
 
         if (!mountedRef.current) return;
 
-        if (response.status === 401) {
-          void stop();
-          return;
-        }
-
         if (!response.ok) {
-          // 429 / 502 / 503 — drop the chunk, call continues.
+          // 401/403/429/502/503 — drop the chunk, the call continues.
           return;
         }
 
@@ -99,43 +106,23 @@ export function useCaptionStream({
           });
         }
       } catch {
-        // Network failure — drop the chunk, call continues.
+        // Network failure — drop the chunk, the call continues.
       }
     },
-    [roomId, onCaption, stop],
+    [roomId, onCaption],
   );
 
-  // Wire worklet port messages to meter + chunk posting.
+  // Start the capture pipeline only while enabled.
   useEffect(() => {
-    const node = workletNodeRef.current;
-    if (!node) return;
-
-    const handler = (event: MessageEvent) => {
-      if (!mountedRef.current) return;
-      const { type } = event.data;
-
-      if (type === "meter") {
-        onMeter?.(event.data.rms);
-      } else if (type === "chunk") {
-        void postChunk(
-          event.data.audio as ArrayBuffer,
-          event.data.startMs,
-          event.data.endMs,
-        );
-      }
-    };
-
-    node.port.onmessage = handler;
-
-    return () => {
-      node.port.onmessage = null;
-    };
-  }, [postChunk, onMeter]);
-
-  // Start the capture pipeline on mount.
-  useEffect(() => {
-    let disposed = false;
     mountedRef.current = true;
+
+    if (!enabled) {
+      stop();
+      return;
+    }
+
+    let disposed = false;
+    runningRef.current = true;
 
     async function start() {
       try {
@@ -171,11 +158,16 @@ export function useCaptionStream({
 
         await audioCtx.audioWorklet.addModule("/worklets/audio-processor.js");
 
+        if (disposed) {
+          void audioCtx.close().catch(() => undefined);
+          return;
+        }
+
         const workletNode = new AudioWorkletNode(audioCtx, "audio-processor");
         workletNodeRef.current = workletNode;
 
         workletNode.port.onmessage = (event: MessageEvent) => {
-          if (!mountedRef.current) return;
+          if (!mountedRef.current || !runningRef.current) return;
           const { type } = event.data;
           if (type === "meter") {
             onMeter?.(event.data.rms);
@@ -191,9 +183,12 @@ export function useCaptionStream({
         const source = audioCtx.createMediaStreamSource(stream);
         sourceRef.current = source;
         source.connect(workletNode);
-        workletNode.connect(audioCtx.destination);
+        // Deliberately NOT connected to audioCtx.destination: that would play
+        // the local mic back through the speakers (echo/feedback). The worklet
+        // does not need a downstream sink to process input.
       } catch {
         // Permission denied or unsupported — captions stay off, call continues.
+        runningRef.current = false;
       }
     }
 
@@ -204,7 +199,7 @@ export function useCaptionStream({
       mountedRef.current = false;
       stop();
     };
-  }, [roomId, postChunk, stop, onMeter]);
+  }, [enabled, postChunk, stop, onMeter]);
 
   return { stop };
 }

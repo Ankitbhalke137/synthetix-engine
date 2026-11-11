@@ -29,10 +29,12 @@ export class AudioProcessor {
   _voicedRun = 0;
   _silenceRun = 0;
   _speaking = false;
-  _chunkStartTime = 0;
+  _chunkStartMs = 0;
   _seq = 0;
   _rmsSum = 0;
   _rmsCount = 0;
+  _sampleRate = 48000;
+  _processedSamples = 0;
   _meterInterval = Math.round((48000 * 50) / 1000);
   messages: Array<{ msg: PortMessage; transfer?: unknown }> = [];
 
@@ -43,8 +45,18 @@ export class AudioProcessor {
   };
 
   setSampleRate(rate: number): void {
+    this._sampleRate = rate;
     this._downsampleRatio = rate / TARGET_SAMPLE_RATE;
     this._meterInterval = Math.round((rate * 50) / 1000);
+  }
+
+  /**
+   * Session-relative timestamp: derived from the audio samples processed so
+   * far, not from wall-clock time. `performance.now()` values are meaningless
+   * to viewers and to the transcript (they measure page uptime).
+   */
+  _elapsedMs(): number {
+    return Math.round((this._processedSamples / this._sampleRate) * 1000);
   }
 
   process(inputs: Float32Array[][]): boolean {
@@ -52,8 +64,6 @@ export class AudioProcessor {
     if (!input || !input[0]) return true;
 
     const channel = input[0]; // Float32Array, mono (channel 0)
-    const now =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
 
     const frameSize = Math.round(48000 * (FRAME_MS / 1000));
 
@@ -61,6 +71,9 @@ export class AudioProcessor {
     for (let offset = 0; offset < channel.length; offset += frameSize) {
       const frame = channel.subarray(offset, offset + frameSize);
       if (frame.length === 0) continue;
+
+      this._processedSamples += frame.length;
+      const elapsedMs = this._elapsedMs();
 
       const energy = this._rms(frame);
       const voiced = energy > this._noiseFloor * ENERGY_MULTIPLIER;
@@ -73,13 +86,14 @@ export class AudioProcessor {
       } else {
         this._noiseFloor = 0.99 * this._noiseFloor + 0.01 * energy;
         this._silenceRun += 1;
-        if (this._speaking) this._voicedRun = 0;
+        // A voiced run must be consecutive: break it on any silence.
+        this._voicedRun = 0;
       }
 
       // Speech start: 3 consecutive voiced frames.
       if (!this._speaking && this._voicedRun >= VOICED_START_FRAMES) {
         this._speaking = true;
-        this._chunkStartTime = now;
+        this._chunkStartMs = elapsedMs;
         this._pcm = [];
       }
 
@@ -107,11 +121,11 @@ export class AudioProcessor {
       }
 
       if (emit) {
-        this._emitChunk(now);
+        this._emitChunk(elapsedMs);
         this._speaking = false;
         this._voicedRun = 0;
         this._silenceRun = 0;
-        this._chunkStartTime = 0;
+        this._chunkStartMs = 0;
       }
     }
 
@@ -174,7 +188,7 @@ export class AudioProcessor {
       {
         type: "chunk",
         seq,
-        startMs: Math.round(this._chunkStartTime),
+        startMs: Math.round(this._chunkStartMs),
         endMs: Math.round(endTime),
         audio: wav,
       },

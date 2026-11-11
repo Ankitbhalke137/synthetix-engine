@@ -30,8 +30,12 @@ class AudioProcessor extends AudioWorkletProcessor {
     this._voicedRun = 0;
     this._silenceRun = 0;
     this._speaking = false;
-    this._chunkStartTime = 0;
+    this._chunkStartMs = 0;
     this._seq = 0;
+
+    // Session-relative clock: samples processed so far. Wall-clock time is
+    // useless here — it measures page uptime, not the call timeline.
+    this._processedSamples = 0;
 
     // Level meter state (RMS per 50 ms).
     this._rmsSum = 0;
@@ -51,12 +55,14 @@ class AudioProcessor extends AudioWorkletProcessor {
 
     const channel = input[0]; // Float32Array, mono (channel 0)
     const frameSize = Math.round(this.sampleRate * (FRAME_MS / 1000));
-    const now = performance.now();
 
     // Walk the input block in analysis frames.
     for (let offset = 0; offset < channel.length; offset += frameSize) {
       const frame = channel.subarray(offset, offset + frameSize);
       if (frame.length === 0) continue;
+
+      this._processedSamples += frame.length;
+      const elapsedMs = this._elapsedMs();
 
       const energy = this._rms(frame);
       const voiced = energy > this._noiseFloor * ENERGY_MULTIPLIER;
@@ -69,13 +75,14 @@ class AudioProcessor extends AudioWorkletProcessor {
       } else {
         this._noiseFloor = 0.99 * this._noiseFloor + 0.01 * energy;
         this._silenceRun += 1;
-        if (this._speaking) this._voicedRun = 0;
+        // A voiced run must be consecutive: break it on any silence.
+        this._voicedRun = 0;
       }
 
       // Speech start: 3 consecutive voiced frames.
       if (!this._speaking && this._voicedRun >= VOICED_START_FRAMES) {
         this._speaking = true;
-        this._chunkStartTime = now;
+        this._chunkStartMs = elapsedMs;
         this._pcm = [];
       }
 
@@ -103,11 +110,11 @@ class AudioProcessor extends AudioWorkletProcessor {
       }
 
       if (emit) {
-        this._emitChunk(now);
+        this._emitChunk(elapsedMs);
         this._speaking = false;
         this._voicedRun = 0;
         this._silenceRun = 0;
-        this._chunkStartTime = 0;
+        this._chunkStartMs = 0;
       }
     }
 
@@ -133,6 +140,10 @@ class AudioProcessor extends AudioWorkletProcessor {
       sum += s * s;
     }
     return Math.sqrt(sum / frame.length);
+  }
+
+  _elapsedMs() {
+    return Math.round((this._processedSamples / this.sampleRate) * 1000);
   }
 
   // Downsample native-rate frame to 16 kHz and append to chunk PCM.
@@ -170,7 +181,7 @@ class AudioProcessor extends AudioWorkletProcessor {
       {
         type: "chunk",
         seq,
-        startMs: Math.round(this._chunkStartTime),
+        startMs: Math.round(this._chunkStartMs),
         endMs: Math.round(endTime),
         audio: wav,
       },

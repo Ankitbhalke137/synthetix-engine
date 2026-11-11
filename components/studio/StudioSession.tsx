@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import { CopyLinkButton } from "@/components/CopyLinkButton";
 import type { Role } from "@/lib/room-policy";
 import { ControlBar } from "./ControlBar";
 import { ROLE_LABEL } from "./labels";
@@ -21,6 +22,36 @@ const STATUS_COPY = {
 } as const;
 
 const TRANSCRIPT_KEY = "synthetix:transcript-open";
+const TRANSCRIPT_EVENT = "synthetix:transcript-change";
+
+/**
+ * The transcript rail preference is external state (localStorage + a media
+ * query), so it is read through `useSyncExternalStore` rather than copied into
+ * component state from an effect: the server snapshot stays "closed", the
+ * client picks up the real preference after hydration, and other tabs stay in
+ * sync via the storage event.
+ */
+function readCaptionsOpen(): boolean {
+  const stored = window.localStorage.getItem(TRANSCRIPT_KEY);
+  if (stored) return stored === "open";
+
+  return window.matchMedia("(min-width: 1024px)").matches;
+}
+
+function subscribeCaptions(onChange: () => void): () => void {
+  window.addEventListener("storage", onChange);
+  window.addEventListener(TRANSCRIPT_EVENT, onChange);
+
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(TRANSCRIPT_EVENT, onChange);
+  };
+}
+
+function writeCaptionsOpen(open: boolean): void {
+  window.localStorage.setItem(TRANSCRIPT_KEY, open ? "open" : "closed");
+  window.dispatchEvent(new Event(TRANSCRIPT_EVENT));
+}
 
 export function StudioSession({
   room,
@@ -61,24 +92,25 @@ export function StudioSession({
   const cameraEnabled = local?.isCameraEnabled ?? false;
 
   // Default open on desktop, closed on small screens unless the guest chose.
-  const [captionsOpen, setCaptionsOpen] = useState(() => {
-    if (typeof window === "undefined") return false;
+  const captionsOpen = useSyncExternalStore(
+    subscribeCaptions,
+    readCaptionsOpen,
+    () => false, // server snapshot
+  );
 
-    const stored = window.localStorage.getItem(TRANSCRIPT_KEY);
-    if (stored) return stored === "open";
+  const toggleCaptions = useCallback(() => {
+    writeCaptionsOpen(!readCaptionsOpen());
+  }, []);
 
-    return window.matchMedia("(min-width: 1024px)").matches;
-  });
+  // Captions run only when the rail is open, the call is live and the local
+  // mic is actually publishing. A muted guest must not be transcribed.
+  const captionsActive = status === "connected" && captionsOpen && microphoneEnabled;
 
-  useEffect(() => {
-    window.localStorage.setItem(TRANSCRIPT_KEY, captionsOpen ? "open" : "closed");
-  }, [captionsOpen]);
-
-  // Start the caption stream (mic + VAD + STT proxy) when captions are open.
+  // Start the caption stream (mic + VAD + STT proxy) while captions are active.
   useCaptionStream({
     roomId: room.id,
+    enabled: captionsActive,
     onCaption: addCaption,
-    onMeter: undefined,
   });
 
   // Host-side recording: MediaRecorder → presigned parts → Neon Object Storage.
@@ -106,9 +138,9 @@ export function StudioSession({
         toggleMicrophone();
       } else if (event.key.toLowerCase() === "c") {
         event.preventDefault();
-        setCaptionsOpen((current) => !current);
+        toggleCaptions();
       } else if (event.key === "Escape") {
-        setCaptionsOpen(false);
+        writeCaptionsOpen(false);
       }
     }
 
@@ -117,7 +149,7 @@ export function StudioSession({
     return () => {
       window.removeEventListener("keydown", handleShortcut);
     };
-  }, [toggleMicrophone]);
+  }, [toggleMicrophone, toggleCaptions]);
 
   return (
     <div className="flex h-dvh flex-col bg-bg">
@@ -153,6 +185,7 @@ export function StudioSession({
             ) : null}
             <BudgetChip />
           </span>
+          <CopyLinkButton path={`/studio/${room.slug}`} />
           <button
             type="button"
             onClick={() => void leave()}
@@ -203,7 +236,13 @@ export function StudioSession({
           )}
         </main>
 
-        {captionsOpen ? <TranscriptRail entries={entries} onClose={() => setCaptionsOpen(false)} /> : null}
+        {captionsOpen ? (
+          <TranscriptRail
+            entries={entries}
+            active={captionsActive}
+            onClose={() => writeCaptionsOpen(false)}
+          />
+        ) : null}
       </div>
 
       {status === "error" ? null : (
@@ -219,7 +258,7 @@ export function StudioSession({
             partCount={recording.partCount}
             onToggleMicrophone={toggleMicrophone}
             onToggleCamera={toggleCamera}
-            onToggleCaptions={() => setCaptionsOpen((current) => !current)}
+            onToggleCaptions={toggleCaptions}
             onToggleRecording={
               recording.state === "idle" || recording.state === "error"
                 ? recording.start

@@ -16,6 +16,10 @@ import { DataPacket_Kind, RoomServiceClient } from "livekit-server-sdk";
 const CaptionRequestSchema = z
   .object({
     roomId: z.string().uuid("Invalid room id."),
+    // Session-relative chunk position (ms), measured by the VAD worklet.
+    // Optional so older clients keep working.
+    startMs: z.coerce.number().int().min(0).max(6 * 60 * 60 * 1000).optional(),
+    endMs: z.coerce.number().int().min(0).max(6 * 60 * 60 * 1000).optional(),
   })
   .strict();
 
@@ -48,6 +52,8 @@ export async function POST(request: Request): Promise<Response> {
 
   const parsed = CaptionRequestSchema.safeParse({
     roomId: formData.get("roomId"),
+    startMs: formData.get("startMs") ?? undefined,
+    endMs: formData.get("endMs") ?? undefined,
   });
 
   if (!parsed.success) {
@@ -160,8 +166,10 @@ export async function POST(request: Request): Promise<Response> {
   `;
   const seq = (maxSeq ?? 0) + 1;
 
-  const startMs = Math.round((segments[0]?.start ?? 0) * 1000);
-  const endMs = Math.round((segments[segments.length - 1]?.end ?? 0) * 1000);
+  const startMs =
+    parsed.data.startMs ?? Math.round((segments[0]?.start ?? 0) * 1000);
+  const endMs =
+    parsed.data.endMs ?? Math.round((segments[segments.length - 1]?.end ?? 0) * 1000);
 
   // Persist idempotently — DB failure must not fail the request.
   const transcriptRow = await getPrisma()
