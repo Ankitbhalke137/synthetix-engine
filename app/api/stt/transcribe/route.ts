@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { getPrisma } from "@/lib/prisma";
+import { checkRoomRateLimit, checkUserRateLimit } from "@/lib/ratelimit";
 import { getSession } from "@/lib/session";
 import { DataPacket_Kind, RoomServiceClient } from "livekit-server-sdk";
 
@@ -69,6 +70,25 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!participant) {
     return errorResponse(403, "FORBIDDEN", "You are not a member of this room.");
+  }
+
+  // Rate limits: per-user 12/min, per-room 20/min (Groq RPM share).
+  const userLimit = await checkUserRateLimit(session.user.id);
+  if (!userLimit.success) {
+    return errorResponse(
+      429,
+      "USER_RATE_LIMITED",
+      `Caption requests rate limited. ${userLimit.remaining} remaining.`,
+    );
+  }
+
+  const roomLimit = await checkRoomRateLimit(parsed.data.roomId);
+  if (!roomLimit.success) {
+    return errorResponse(
+      429,
+      "ROOM_RATE_LIMITED",
+      `Room caption rate limited. ${roomLimit.remaining} remaining.`,
+    );
   }
 
   const groqKey = process.env.GROQ_API_KEY;
