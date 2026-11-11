@@ -57,10 +57,12 @@ export function StudioSession({
   room,
   viewer,
   preferences,
+  guestDisplayName,
 }: {
   room: { id: string; slug: string; name: string };
   viewer: { name: string; role: Role };
   preferences: StudioPreferences;
+  guestDisplayName?: string;
 }) {
   // Transcript entries: server-authored only, deduped by seq.
   const [entries, setEntries] = useState<CaptionEntry[]>([]);
@@ -85,7 +87,7 @@ export function StudioSession({
     leave,
     toggleMicrophone,
     toggleCamera,
-  } = useStudioRoom(room.slug, preferences, addCaption);
+  } = useStudioRoom(room.slug, preferences, addCaption, guestDisplayName);
 
   const local = participants.find((participant) => participant.isLocal);
   const microphoneEnabled = local?.isMicrophoneEnabled ?? false;
@@ -151,12 +153,14 @@ export function StudioSession({
     };
   }, [toggleMicrophone, toggleCaptions]);
 
+  const backHref = guestDisplayName ? "/" : "/dashboard";
+
   return (
     <div className="flex h-dvh flex-col bg-bg">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <Link
-            href="/dashboard"
+            href={backHref}
             className="shrink-0 text-sm font-semibold tracking-tight hover:text-accent"
           >
             Synthetix Engine
@@ -224,10 +228,10 @@ export function StudioSession({
                   Try again
                 </button>
                 <Link
-                  href="/dashboard"
+                  href={backHref}
                   className="rounded-control border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-accent"
                 >
-                  Back to dashboard
+                  {guestDisplayName ? "Back to home" : "Back to dashboard"}
                 </Link>
               </div>
             </div>

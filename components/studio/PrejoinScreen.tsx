@@ -19,10 +19,12 @@ export function PrejoinScreen({
   room,
   viewer,
   onJoin,
+  backHref = "/dashboard",
 }: {
   room: { slug: string; name: string };
   viewer: { name: string; role: Role };
   onJoin: (preferences: StudioPreferences) => void;
+  backHref?: string;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -97,14 +99,14 @@ export function PrejoinScreen({
   return (
     <div className="flex min-h-dvh flex-col bg-bg">
       <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
-        <Link href="/dashboard" className="text-sm font-semibold tracking-tight hover:text-accent">
+        <Link href={backHref} className="text-sm font-semibold tracking-tight hover:text-accent">
           Synthetix Engine
         </Link>
         <Link
-          href="/dashboard"
+          href={backHref}
           className="text-sm text-text-muted transition-colors hover:text-text"
         >
-          Back to dashboard
+          {backHref === "/" ? "Back to home" : "Back to dashboard"}
         </Link>
       </header>
 

@@ -149,9 +149,9 @@ Content-Type: application/json
 
 | Status | `error.code` | When |
 |---|---|---|
-| 200 | — | `{ token, url, room: { slug, name }, role, identity }` |
-| 400 | `INVALID_INPUT` | malformed JSON, bad slug, or unknown keys (strict schema) |
-| 401 | `UNAUTHENTICATED` | no session cookie |
+| 200 | — | `{ token, url, roomId, room: { slug, name }, role, identity }` |
+| 400 | `INVALID_INPUT` | malformed JSON, bad slug, bad display name, or unknown keys (strict schema) |
+| 401 | `UNAUTHENTICATED` | no session cookie and no guest display name |
 | 404 | `ROOM_NOT_FOUND` | unknown slug |
 | 409 | `ROOM_NOT_LIVE` / `ROOM_ENDED` | draft (non-host) / ended or archived |
 
@@ -160,5 +160,5 @@ Rules:
 - the role is re-derived from `RoomParticipant` on every request; the body cannot claim one — unknown keys are rejected outright
 - the host's first successful call performs `draft → live`; reconnects are idempotent
 - responses are `Cache-Control: no-store`; tokens are never persisted or logged
-- this route is session-only (anon → 401). Guests are already handled by `admitParticipant`, but their entry point ships with the Phase 4 join flow
+- signed-in callers are identified by their session; a caller with no session may pass a `displayName` and joins as a guest (`participant`), with `identity = guest:<participantId>` derived from the persisted row
 - `createRoomAction` (server action, `app/actions/rooms.ts`) creates a draft room for the signed-in user and returns `{ ok: true, slug }`
