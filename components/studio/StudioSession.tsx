@@ -8,6 +8,7 @@ import { ControlBar } from "./ControlBar";
 import { ROLE_LABEL } from "./labels";
 import { TranscriptRail } from "./TranscriptRail";
 import { useCaptionStream, type CaptionEntry } from "./useCaptionStream";
+import { useRecording } from "./useRecording";
 import { useStudioRoom, type StudioPreferences } from "./useStudioRoom";
 import { VideoGrid } from "./VideoGrid";
 
@@ -29,6 +30,18 @@ export function StudioSession({
   viewer: { name: string; role: Role };
   preferences: StudioPreferences;
 }) {
+  // Transcript entries: server-authored only, deduped by seq.
+  const [entries, setEntries] = useState<CaptionEntry[]>([]);
+  const lastSeqRef = useRef(-1);
+
+  const addCaption = useCallback((entry: CaptionEntry) => {
+    setEntries((current) => {
+      if (entry.seq <= lastSeqRef.current) return current; // ignore duplicates
+      lastSeqRef.current = entry.seq;
+      return [...current, entry];
+    });
+  }, []);
+
   const {
     status,
     error,
@@ -40,7 +53,7 @@ export function StudioSession({
     leave,
     toggleMicrophone,
     toggleCamera,
-  } = useStudioRoom(room.slug, preferences);
+  } = useStudioRoom(room.slug, preferences, addCaption);
 
   const local = participants.find((participant) => participant.isLocal);
   const microphoneEnabled = local?.isMicrophoneEnabled ?? false;
@@ -60,23 +73,19 @@ export function StudioSession({
     window.localStorage.setItem(TRANSCRIPT_KEY, captionsOpen ? "open" : "closed");
   }, [captionsOpen]);
 
-  // Transcript entries: server-authored only, deduped by seq.
-  const [entries, setEntries] = useState<CaptionEntry[]>([]);
-  const lastSeqRef = useRef(-1);
-
-  const addCaption = useCallback((entry: CaptionEntry) => {
-    setEntries((current) => {
-      if (entry.seq <= lastSeqRef.current) return current; // ignore duplicates
-      lastSeqRef.current = entry.seq;
-      return [...current, entry];
-    });
-  }, []);
-
   // Start the caption stream (mic + VAD + STT proxy) when captions are open.
   useCaptionStream({
     roomId: room.id,
     onCaption: addCaption,
     onMeter: undefined,
+  });
+
+  // Host-side recording: MediaRecorder → presigned parts → Neon Object Storage.
+  const recording = useRecording({
+    roomId: room.id,
+    audioTrack: local?.audioTrack ?? null,
+    isHost: viewer.role === "host",
+    isConnected: status === "connected",
   });
 
   // M toggles the mic, C the caption rail, Esc closes the mobile sheet.
@@ -203,9 +212,17 @@ export function StudioSession({
             captionsEnabled={captionsOpen}
             busy={mediaBusy}
             disabled={status !== "connected"}
+            isRecording={recording.state === "recording" || recording.state === "uploading" || recording.state === "stopping"}
+            recordingError={recording.error}
+            partCount={recording.partCount}
             onToggleMicrophone={toggleMicrophone}
             onToggleCamera={toggleCamera}
             onToggleCaptions={() => setCaptionsOpen((current) => !current)}
+            onToggleRecording={
+              recording.state === "idle" || recording.state === "error"
+                ? recording.start
+                : recording.stop
+            }
             onLeave={() => void leave()}
           />
         </footer>
