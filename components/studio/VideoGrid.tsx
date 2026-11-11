@@ -31,12 +31,16 @@ export function VideoGrid({
   const promoteSpeaker = participants.length >= 3;
 
   // Size the grid to the roster so one or two guests do not sit in a corner.
+  // Three or four participants use a 2×2 grid: wider tiles mean sharp 720p
+  // video instead of four postage stamps. Only larger rooms add a third column.
   const layout =
     participants.length === 1
-      ? "mx-auto w-full max-w-3xl grid-cols-1"
+      ? "mx-auto w-full max-w-5xl grid-cols-1"
       : participants.length === 2
-        ? "mx-auto w-full max-w-5xl grid-cols-1 sm:grid-cols-2"
-        : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3";
+        ? "mx-auto w-full max-w-6xl grid-cols-1 sm:grid-cols-2"
+        : participants.length <= 4
+          ? "grid-cols-1 sm:grid-cols-2"
+          : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3";
 
   return (
     <div className={`grid h-full content-center gap-3 ${layout}`}>

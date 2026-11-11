@@ -18,8 +18,13 @@ const MIN_PART_BYTES = 5 * 1024 * 1024;
 /** How often MediaRecorder hands us a blob. Small slices keep memory flat. */
 const SLICE_MS = 1_000;
 
-/** Preferred container/codec order. Opus in WebM is the universal choice. */
-const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
+/** Preferred container/codec order. A/V first, then audio-only fallback. */
+const VIDEO_MIME_CANDIDATES = [
+  "video/webm;codecs=vp9,opus",
+  "video/webm;codecs=vp8,opus",
+  "video/webm",
+];
+const AUDIO_MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -28,15 +33,16 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * upload to Neon Object Storage.
  *
  * Flow:
- *  1. start() → wrap the published mic track in a MediaStream → MediaRecorder
- *     → POST /api/storage/presigned/init → uploadId
+ *  1. start() → wrap the published camera/mic tracks in a MediaStream →
+ *     MediaRecorder → POST /api/storage/presigned/init → uploadId
  *  2. ondataavailable → buffer bytes until ≥ 5 MiB → POST presigned/part →
  *     PUT the part directly to Neon (sequential queue, ordered by part number)
  *  3. stop() → flush the final (possibly small) part → await the queue →
  *     POST /api/storage/complete with mimeType/size/duration → Recording row
  *
- * The recorder wraps the LiveKit track rather than capturing the device again,
- * and it never calls `track.stop()`: that would end the call's microphone.
+ * The recorder wraps the LiveKit tracks rather than capturing the device again,
+ * and it never calls `track.stop()`: that would end the call's camera/mic.
+ * Recording degrades to audio-only when the host has their camera off.
  *
  * Permission denial, unsupported browser, or upload failures degrade
  * gracefully — the call continues without recording.
@@ -44,11 +50,13 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export function useRecording({
   roomId,
   audioTrack,
+  videoTrack,
   isHost,
   isConnected,
 }: {
   roomId: string;
   audioTrack: { mediaStreamTrack: MediaStreamTrack } | null;
+  videoTrack: { mediaStreamTrack: MediaStreamTrack } | null;
   isHost: boolean;
   isConnected: boolean;
 }) {
@@ -203,20 +211,28 @@ export function useRecording({
     setError(null);
 
     try {
-      const mimeType = MIME_CANDIDATES.find((candidate) =>
+      const mimeCandidates = videoTrack ? VIDEO_MIME_CANDIDATES : AUDIO_MIME_CANDIDATES;
+      const mimeType = mimeCandidates.find((candidate) =>
         MediaRecorder.isTypeSupported(candidate),
       );
 
       if (!mimeType) {
-        throw new Error("This browser cannot record Opus audio.");
+        throw new Error(
+          videoTrack
+            ? "This browser cannot record WebM video."
+            : "This browser cannot record Opus audio.",
+        );
       }
 
-      // Wrap the already-published track. Do not call getUserMedia again and
-      // never stop this track — LiveKit owns it for the duration of the call.
-      const stream = new MediaStream([audioTrack.mediaStreamTrack]);
-      const mediaRecorder = new MediaRecorder(stream, {
+      // Wrap the already-published tracks. Do not call getUserMedia again and
+      // never stop these tracks — LiveKit owns them for the duration of the call.
+      const mediaStream = new MediaStream([audioTrack.mediaStreamTrack]);
+      if (videoTrack) mediaStream.addTrack(videoTrack.mediaStreamTrack);
+
+      const mediaRecorder = new MediaRecorder(mediaStream, {
         mimeType,
-        audioBitsPerSecond: 64_000,
+        audioBitsPerSecond: 96_000,
+        ...(videoTrack ? { videoBitsPerSecond: 3_000_000 } : {}),
       });
 
       mediaRecorderRef.current = mediaRecorder;
@@ -265,7 +281,7 @@ export function useRecording({
       setError(caught instanceof Error ? caught.message : "Failed to start recording.");
       setState("error");
     }
-  }, [roomId, audioTrack, isHost, isConnected, flushPendingPart, resetSession]);
+  }, [roomId, audioTrack, videoTrack, isHost, isConnected, flushPendingPart, resetSession]);
 
   // --- stop recording ------------------------------------------------------
 

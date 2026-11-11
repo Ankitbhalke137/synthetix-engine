@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import type { Role } from "@/lib/room-policy";
+import { PREVIEW_CONSTRAINTS } from "@/lib/media-settings";
 import { avatarColor, initials } from "./avatar";
 import { ROLE_LABEL } from "./labels";
 import type { StudioPreferences } from "./useStudioRoom";
@@ -38,7 +39,7 @@ export function PrejoinScreen({
 
     async function startPreview() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia(PREVIEW_CONSTRAINTS);
 
         if (disposed) {
           stream.getTracks().forEach((track) => track.stop());

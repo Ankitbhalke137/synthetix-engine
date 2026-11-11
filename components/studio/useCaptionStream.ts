@@ -15,25 +15,29 @@ export type CaptionEntry = {
 };
 
 /**
- * useCaptionStream — captures the local mic, runs the VAD worklet, posts WAV
- * chunks to /api/stt/transcribe, and feeds captions back via onCaption.
+ * useCaptionStream — analyses the already-published LiveKit microphone track,
+ * runs the VAD worklet, posts WAV chunks to /api/stt/transcribe, and feeds
+ * captions back via onCaption.
  *
- * The mic stream is owned here (started while `enabled`, stopped otherwise).
- * The worklet never touches the main thread with PCM; it only posts meter RMS
- * and finished WAV chunks. Permission denial is silent — captions stay off
- * and the call continues.
+ * Reusing the published track is deliberate: a second `getUserMedia` call would
+ * open the microphone twice, double the browser's audio processing load and
+ * transcribe a stream that can drift out of sync with what guests hear. The
+ * hook never stops the track because LiveKit owns it for the call.
  *
  * `enabled` must reflect real user intent (captions open AND the local mic is
- * live). Capturing unconditionally would prompt for the mic a second time and
- * keep transcribing audio the user believes is muted.
+ * live). Capturing unconditionally would keep transcribing audio the user
+ * believes is muted.
  */
 export function useCaptionStream({
   roomId,
+  audioTrack,
   enabled,
   onCaption,
   onMeter,
 }: {
   roomId: string;
+  /** The local participant's published microphone track, or null. */
+  audioTrack: MediaStreamTrack | null;
   enabled: boolean;
   onCaption: (entry: CaptionEntry) => void;
   onMeter?: (rms: number) => void;
@@ -41,7 +45,6 @@ export function useCaptionStream({
   const audioCtxRef = useRef<AudioContext | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const runningRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -51,8 +54,7 @@ export function useCaptionStream({
     sourceRef.current = null;
     workletNodeRef.current?.disconnect();
     workletNodeRef.current = null;
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
+    // Deliberately no track.stop(): the LiveKit track belongs to the call.
     void audioCtxRef.current?.close().catch(() => undefined);
     audioCtxRef.current = null;
   }, []);
@@ -116,7 +118,7 @@ export function useCaptionStream({
   useEffect(() => {
     mountedRef.current = true;
 
-    if (!enabled) {
+    if (!enabled || !audioTrack) {
       stop();
       return;
     }
@@ -126,21 +128,7 @@ export function useCaptionStream({
 
     async function start() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            channelCount: 1,
-          },
-        });
-
-        if (disposed) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-
-        streamRef.current = stream;
+        const stream = new MediaStream([audioTrack as MediaStreamTrack]);
 
         const AudioContext =
           window.AudioContext ||
@@ -187,7 +175,8 @@ export function useCaptionStream({
         // the local mic back through the speakers (echo/feedback). The worklet
         // does not need a downstream sink to process input.
       } catch {
-        // Permission denied or unsupported — captions stay off, call continues.
+        // AudioWorklet unsupported or context creation failed — captions stay
+        // off and the call continues.
         runningRef.current = false;
       }
     }
@@ -199,7 +188,7 @@ export function useCaptionStream({
       mountedRef.current = false;
       stop();
     };
-  }, [enabled, postChunk, stop, onMeter]);
+  }, [audioTrack, enabled, postChunk, stop, onMeter]);
 
   return { stop };
 }
