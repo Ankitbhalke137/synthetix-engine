@@ -99,7 +99,7 @@ Fill `.env.local` (pooled `DATABASE_URL`, LiveKit key/secret/URL), run `npm run 
 | 2 | Auth (Better Auth) + Prisma schema on Neon | ✅ live — sign-up/sign-in verified |
 | 3 | Rooms: create/join + LiveKit token issuance | ✅ verified — create/admit/token on real Neon + LiveKit |
 | 4 | Studio UI: video grid, controls, transcript rail | ✅ verified — pre-join, grid, mic/cam controls, responsive transcript rail |
-| 5 | STT pipeline: worklet → VAD → Groq → DataChannel | ⬜ |
+| 5 | STT pipeline: worklet → VAD → Groq → DataChannel | ✅ verified — proxy, VAD worklet, LiveKit broadcast |
 | 6 | Recording: MediaRecorder → multipart presigned upload | ⬜ |
 | 7 | Quota guards, rate limits, error/empty states | ⬜ |
 | 8 | Tests, CI, README demo GIF | ⬜ |
