@@ -145,7 +145,7 @@ npx prisma generate    # already runs via postinstall
 | 4 | Studio UI (design-spec states) | ✅ verified in-browser (pre-join → grid → controls → transcript shell) |
 | 5 | STT pipeline (VAD → Groq → DataChannel) | ✅ verified — proxy, worklet, DataChannel broadcast |
 | 6 | Recording (multipart → playback) | ✅ verified — MediaRecorder, presigned parts, Neon Storage |
-| 7 | Quota guards + ratelimits + polish | ⬜ |
+| 7 | Quota guards + ratelimits + polish | ⚠️ partial — rate limits + quota guards done; budget chip + playback UI pending |
 | 8 | Tests + CI + demo GIF | ⬜ |
 
 **Definition of Done:** [`code-complexity-and-quality.md` §8](./docs/code-complexity-and-quality.md) · **Agent workflow:** [`subagent-team.md`](./docs/subagent-team.md) · **Phase 2 kickoff:** schema per `database-and-security.md` §2, Better Auth per §3.
