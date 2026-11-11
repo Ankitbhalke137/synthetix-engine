@@ -30,7 +30,7 @@
 ## Status
 
 **Phase 8 complete — tests + CI/CD ✅.** The app is deployed and building clean:
-`tsc` ✅ · `lint` ✅ · 70 tests ✅ · `next build` ✅ · CI on every PR ✅.
+`tsc` ✅ · `lint` ✅ · 71 tests ✅ · `next build` ✅ · CI on every PR ✅.
 The only optional leftover is a short demo GIF.
 
 ---
@@ -52,9 +52,9 @@ CD, all documented before and alongside the code.
 **Studio**
 
 - Email/password authentication with sessions (Better Auth).
-- Create a room, share a link, join from the browser with zero installs.
+- Create a room, copy the invite link, and join from the browser with zero installs — signed-in teammates directly, guests by display name.
 - Multi-guest WebRTC video via LiveKit — active-speaker grid, up to 9 tiles.
-- Role-aware controls: host, moderator, participant, viewer.
+- Role-aware access: host, moderator, participant, viewer (enforced on tokens and storage).
 - Pre-join device check, mic/camera controls, level meter, keyboard shortcuts.
 - Responsive transcript rail that becomes a bottom sheet on small screens.
 
@@ -71,7 +71,7 @@ CD, all documented before and alongside the code.
 
 - Client-side `MediaRecorder` + multipart presigned uploads — no paid egress.
 - Direct-to-storage uploads bypass Vercel bandwidth.
-- Recordings list and authorized presigned playback.
+- Recordings list API and authorized presigned playback.
 - Storage keys stored in Postgres; URLs are signed on read, never persisted.
 
 **Trust and guardrails**
@@ -84,7 +84,7 @@ CD, all documented before and alongside the code.
 **Engineering**
 
 - TypeScript strict, no `any`, no `console.log` in shipped paths.
-- 70 Vitest tests across quota math, VAD, tokens, routes, auth, and rooms.
+- 71 Vitest tests across quota math, VAD, tokens, routes, auth, and rooms.
 - GitHub Actions CI: lint, typecheck, tests, Prisma validation, production build.
 - CodeQL scanning, Dependabot updates, issue/PR templates, Code of Conduct.
 
@@ -198,7 +198,7 @@ Copy [`.env.example`](./.env.example) and fill these in:
 | `NEON_STORAGE_ENDPOINT` | Neon console | S3-compatible endpoint |
 | `NEON_STORAGE_ACCESS_KEY_ID` / `NEON_STORAGE_SECRET_ACCESS_KEY` | Neon console | Scoped storage credentials |
 | `NEON_STORAGE_BUCKET_NAME` | You | e.g. `synthetix-recordings` |
-| `NEON_STORAGE_REGION` | Neon console | Verify the region — it may not be `us-east-1` |
+| `NEON_STORAGE_REGION` | Neon console | Match the endpoint region (this deployment: `ap-southeast-1`) |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | LiveKit Cloud console | Server only |
 | `NEXT_PUBLIC_LIVEKIT_URL` | LiveKit Cloud console | Public WebSocket URL — not a key |
 | `GROQ_API_KEY` | Groq console | Server only; used by the STT proxy |
@@ -335,7 +335,7 @@ docs/                PRD, architecture, ADRs, specs, contributing, CI/CD
 | 5 | STT pipeline: worklet → VAD → Groq → DataChannel | ✅ verified |
 | 6 | Recording: MediaRecorder → multipart presigned upload | ✅ verified |
 | 7 | Quota guards, rate limits, error/empty states | ✅ verified |
-| 8 | Tests, CI/CD, contributor docs | ✅ 70 tests · CI · CD · CodeQL |
+| 8 | Tests, CI/CD, contributor docs | ✅ 71 tests · CI · CD · CodeQL |
 | 8b | Demo GIF | ⬜ optional |
 
 ## Errata vs the original blueprint

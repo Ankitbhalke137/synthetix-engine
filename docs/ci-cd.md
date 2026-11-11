@@ -45,7 +45,7 @@ Both jobs must pass before a PR can merge. They run in parallel.
 5. `npx prisma validate` — schema is syntactically valid and has a URL
 6. `npm run lint`
 7. `npm run typecheck`
-8. `npm test` — Vitest (70 tests)
+8. `npm test` — Vitest (71 tests)
 
 ### `build`
 
@@ -149,7 +149,7 @@ for CI/deployment configuration.
 | `NEON_STORAGE_ACCESS_KEY_ID` | server | Scoped storage credential |
 | `NEON_STORAGE_SECRET_ACCESS_KEY` | server | Scoped storage credential |
 | `NEON_STORAGE_BUCKET_NAME` | server | `synthetix-recordings` |
-| `NEON_STORAGE_REGION` | server | e.g. `us-east-2` — verify in the console |
+| `NEON_STORAGE_REGION` | server | Match the endpoint region shown in the console (e.g. `ap-southeast-1`) |
 | `LIVEKIT_API_KEY` | server | Token minting + moderation |
 | `LIVEKIT_API_SECRET` | server | Server only |
 | `NEXT_PUBLIC_LIVEKIT_URL` | client | Public WebSocket URL — not a key |

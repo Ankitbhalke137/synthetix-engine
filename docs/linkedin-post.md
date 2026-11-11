@@ -44,10 +44,10 @@ A few decisions that shaped the build:
 • Upstash Redis (rate limiting)
 • Better Auth
 • Vercel Hobby (hosting)
-• Vitest + GitHub Actions (70 tests + CI)
+• Vitest + GitHub Actions (71 tests + CI)
 
 **The engineering part I'm proudest of**
-The docs came first: a PRD, architecture + ADRs, RBAC matrix, design spec, security model, quality gates, and PR rules — *then* code, feature by feature, one branch → PR → squash-merge at a time. 29 PRs. Every PR passed typecheck, lint, tests, and a production build before merge.
+The docs came first: a PRD, architecture + ADRs, RBAC matrix, design spec, security model, quality gates, and PR rules — *then* code, feature by feature, one branch → PR → squash-merge at a time. 33 PRs. Every PR passed typecheck, lint, tests, and a production build before merge.
 
 The result: a product that actually runs on free tiers because the architecture respects their limits — and a repo that shows *why* every decision was made.
 
@@ -70,7 +70,7 @@ Built with Next.js 16, React 19, TypeScript, Prisma 7, Neon, LiveKit, Groq Whisp
 
 The hard part wasn't the video — it was engineering around free-tier limits: VAD 8–12s audio chunks for Groq's rate limits, client-side recording to dodge LiveKit's transcode cap, and quota guardrails so the free tier never breaks.
 
-29 PRs. Every one passed typecheck, lint, 70 tests, and a production build before merge.
+33 PRs. Every one passed typecheck, lint, 71 tests, and a production build before merge.
 
 Live → https://synthetix-engine.vercel.app
 Code → https://github.com/Ankitbhalke137/synthetix-engine
@@ -135,5 +135,5 @@ first two are already captured from the live deployment.
 > WebRTC/LiveKit, Groq Whisper, Prisma/Neon, Neon Object Storage, Upstash).
 > Multi-guest video, real-time AI captions, and client-side recordings on a
 > $0/month free-tier stack. Docs-first build: PRD → ADRs → RBAC → tests → CI;
-> 29 PRs, 70 tests, every merge gated by typecheck, lint, and a production build.
+> 33 PRs, 71 tests, every merge gated by typecheck, lint, and a production build.
 > Live: https://synthetix-engine.vercel.app · Code: https://github.com/Ankitbhalke137/synthetix-engine
