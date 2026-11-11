@@ -20,7 +20,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 |---|---|
 | **What** | Browser-based live studio: multi-guest WebRTC rooms, real-time AI captions (Groq Whisper), client-side recordings → Neon Object Storage. \$0/month free-tier stack. |
 | **Why** | Showcase SDE project: requirements → architecture + ADRs → security → quality gates → CI, all engineering-doc driven. |
-| **Phase** | **3 complete** (docs ✅, scaffold ✅, env/DB ✅, auth ✅, rooms + LiveKit tokens ✅ — verified on Neon + LiveKit Cloud). Next: Phase 4 (studio UI). See [`README.md`](./README.md#implementation-status). |
+| **Phase** | **4 complete** (docs ✅, scaffold ✅, env/DB ✅, auth ✅, rooms + LiveKit tokens ✅, studio UI ✅ — verified in-browser). Next: Phase 5 (live captions). See [`README.md`](./README.md#implementation-status). |
 | **Stack** | Next.js **16.4.6** (App Router) · React 19.3 · TypeScript strict · Tailwind **v4** (CSS `@theme`, no config file) · Prisma **7** (`prisma-client` generator, `prisma7.config.ts`, generated client in `generated/`) + `@neondatabase/serverless` · Better Auth · LiveKit · Groq · Upstash · AWS S3 SDK (Neon S3 endpoint) |
 | **Node** | Local **v20.20.2** — some installed packages warn they want Node ≥ 22 (`machina`, `@prisma/streams-local`). Non-blocking now; if Prisma tooling misbehaves, switch to Node 22 LTS (also matches Vercel builds). |
 | **Original idea** | [`BLUEPRINT-ORIGINAL.md`](./docs/BLUEPRINT-ORIGINAL.md) — kept for provenance; **superseded** by this doc set (§6 errata). |
@@ -142,7 +142,7 @@ npx prisma generate    # already runs via postinstall
 | 1 | Scaffold + deps + `.env.example` + docs | ✅ |
 | 2 | Auth + Prisma schema on Neon | ✅ verified (sign-up → sign-in → get-session → cleanup) |
 | 3 | Rooms + LiveKit tokens (role claims) | ✅ verified (create → admit → token → draft→live) |
-| 4 | Studio UI (design-spec states) | ⬜ |
+| 4 | Studio UI (design-spec states) | ✅ verified in-browser (pre-join → grid → controls → transcript shell) |
 | 5 | STT pipeline (VAD → Groq → DataChannel) | ⬜ |
 | 6 | Recording (multipart → playback) | ⬜ |
 | 7 | Quota guards + ratelimits + polish | ⬜ |
