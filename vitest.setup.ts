@@ -17,6 +17,8 @@ const TEST_ENV: Record<string, string> = {
   UPSTASH_REDIS_REST_TOKEN: "test-upstash-token",
 };
 
+// Tests must be deterministic regardless of the ambient environment (local
+// `.env.local` or CI placeholders). Always override with the fake values.
 for (const [key, value] of Object.entries(TEST_ENV)) {
-  if (!process.env[key]) process.env[key] = value;
+  process.env[key] = value;
 }
