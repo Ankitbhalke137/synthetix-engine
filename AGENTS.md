@@ -86,7 +86,7 @@ Conflict rule: two docs disagree → fix **both** in one docs PR, never pick sil
 npm run dev            # next dev — also (re)writes the agent-rules block above
 npm run build          # next build (typecheck included)
 npm run lint           # eslint
-npx tsc --noEmit       # typecheck (also run before PR)
+npm run typecheck      # next typegen + tsc (also run before PR)
 npm test               # vitest (unit; test:watch for dev loop)
 npx prisma validate    # after schema edits (needs a DATABASE_URL — CI uses a placeholder)
 npm run db:migrate     # local, on Neon `dev` branch only

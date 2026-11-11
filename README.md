@@ -217,7 +217,7 @@ canonical template.
 | `npm run lint` | ESLint |
 | `npm test` | Run the Vitest suite |
 | `npm run test:watch` | Vitest in watch mode |
-| `npx tsc --noEmit` | Typecheck without emitting |
+| `npm run typecheck` | Generate Next.js route types and typecheck |
 | `npx prisma generate` | Regenerate the client (also runs on install) |
 | `npm run db:validate` | Validate `schema.prisma` |
 | `npm run db:migrate` | Create/apply migrations in development |
@@ -229,7 +229,7 @@ canonical template.
 ## Testing and quality gates
 
 ```bash
-npm run lint && npx tsc --noEmit && npm test && npm run build
+npm run lint && npm run typecheck && npm test && npm run build
 ```
 
 The suite covers quota math and fail-open behavior, VAD transitions and WAV

@@ -25,7 +25,7 @@ Closes #
 <!-- Exact commands and/or manual steps. -->
 
 - [ ] `npm run lint`
-- [ ] `npx tsc --noEmit`
+- [ ] `npm run typecheck`
 - [ ] `npm test`
 - [ ] `npm run build`
 - [ ] Manual check (describe):

@@ -102,7 +102,7 @@ build:    checkout → setup-node → npm ci → next build
 ## 8. Definition of Done (per feature)
 
 1. Code + tests (per §3) green locally.
-2. `npm run lint && npx tsc --noEmit && npm run build` green.
+2. `npm run lint && npm run typecheck && npm run build` green.
 3. Docs touched wherever behavior/decisions changed (checklist in PR template).
 4. New env vars → `.env.example` + `AGENTS.md` env table.
 5. Complexity budgets hold.

@@ -76,7 +76,7 @@ npm run dev          # http://localhost:3000
 
 You do **not** need real credentials to work on docs, pure logic, or tests:
 
-- `npm test`, `npm run lint`, and `npx tsc --noEmit` run fully offline.
+- `npm test`, `npm run lint`, and `npm run typecheck` run fully offline.
 - `npm run build` uses lazy singletons, so it succeeds without secrets.
 - Routes that call vendors return `503` when their key is missing — expected.
 
@@ -128,7 +128,7 @@ Useful scopes: `auth`, `room`, `studio`, `stt`, `record`, `db`, `ci`, `docs`.
 
 ```bash
 npm run lint          # ESLint (no warnings allowed in changed files)
-npx tsc --noEmit      # TypeScript strict
+npm run typecheck     # next typegen + TypeScript strict
 npm test              # Vitest — currently 70 tests
 npm run build         # Next.js production build
 ```
