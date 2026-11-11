@@ -112,8 +112,8 @@ function DeviceButton({
 }
 
 /**
- * In-room controls. Record stays disabled until Phase 6 ships it — an honest
- * disabled control beats a button that silently does nothing.
+ * In-room controls. Record is host-only; an honest disabled control beats a
+ * button that silently does nothing.
  */
 export function ControlBar({
   microphoneEnabled,
@@ -121,9 +121,13 @@ export function ControlBar({
   captionsEnabled,
   busy,
   disabled,
+  isRecording,
+  recordingError,
+  partCount,
   onToggleMicrophone,
   onToggleCamera,
   onToggleCaptions,
+  onToggleRecording,
   onLeave,
 }: {
   microphoneEnabled: boolean;
@@ -131,11 +135,17 @@ export function ControlBar({
   captionsEnabled: boolean;
   busy: boolean;
   disabled: boolean;
+  isRecording: boolean;
+  recordingError: string | null;
+  partCount: number;
   onToggleMicrophone: () => void;
   onToggleCamera: () => void;
   onToggleCaptions: () => void;
+  onToggleRecording: () => void;
   onLeave: () => void;
 }) {
+  const recordingBusy = isRecording || recordingError !== null;
+
   return (
     <div className="mx-auto flex w-full max-w-3xl items-center justify-center gap-2">
       <DeviceButton
@@ -180,13 +190,54 @@ export function ControlBar({
 
       <button
         type="button"
-        disabled
-        title="Recording ships with the recording phase"
-        aria-label="Record, not available yet"
-        className="grid size-11 place-items-center rounded-control border border-border bg-surface-2 text-text-muted opacity-50"
+        aria-pressed={isRecording}
+        aria-label={isRecording ? "Stop recording" : "Start recording"}
+        title={
+          recordingError
+            ? recordingError
+            : isRecording
+              ? "Stop recording"
+              : "Start recording (host only)"
+        }
+        onClick={onToggleRecording}
+        disabled={disabled || recordingBusy}
+        className={`grid size-11 place-items-center rounded-control border transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+          isRecording
+            ? "border-danger bg-danger text-white"
+            : "border-border bg-surface-2 text-text hover:border-danger hover:text-danger"
+        }`}
       >
-        <RecordIcon />
+        {isRecording ? (
+          <span className="flex items-center gap-1">
+            <span
+              aria-hidden
+              className="flex h-2.5 w-2.5 rounded-full bg-white animate-pulse"
+            />
+            <span className="text-[10px] font-semibold">REC</span>
+          </span>
+        ) : (
+          <RecordIcon />
+        )}
       </button>
+
+      {partCount > 0 && (
+        <span aria-hidden className="mx-1 h-6 w-px bg-border" />
+      )}
+
+      {partCount > 0 ? (
+        <span className="font-mono text-[10px] font-semibold text-text-muted">
+          {partCount} part{partCount === 1 ? "" : "s"}
+        </span>
+      ) : null}
+
+      {recordingError ? (
+        <span
+          className="flex items-center gap-1 px-2 py-1 rounded-control border border-danger/50 bg-danger/15 text-danger text-xs"
+        >
+          <span aria-hidden>⚠</span>
+          <span>{recordingError}</span>
+        </span>
+      ) : null}
 
       <button
         type="button"
