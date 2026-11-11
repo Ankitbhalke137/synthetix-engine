@@ -20,7 +20,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 |---|---|
 | **What** | Browser-based live studio: multi-guest WebRTC rooms, real-time AI captions (Groq Whisper), client-side recordings → Neon Object Storage. \$0/month free-tier stack. |
 | **Why** | Showcase SDE project: requirements → architecture + ADRs → security → quality gates → CI, all engineering-doc driven. |
-| **Phase** | **7 complete** (docs ✅, scaffold ✅, env/DB ✅, auth ✅, rooms + LiveKit tokens ✅, studio UI ✅, STT pipeline ✅, recording ✅, quota guards + ratelimits ✅ — verified end-to-end). Next: Phase 8 (tests + CI + demo GIF). See [`README.md`](./README.md#implementation-status). |
+| **Phase** | **8 complete** (docs ✅, scaffold ✅, env/DB ✅, auth ✅, rooms + LiveKit tokens ✅, studio UI ✅, STT pipeline ✅, recording ✅, quota guards + ratelimits ✅, tests + CI/CD ✅ — 70 tests, GitHub Actions, CodeQL, Vercel deploy). Optional leftover: demo GIF. See [`README.md`](./README.md#implementation-status). |
 | **Stack** | Next.js **16.4.6** (App Router) · React 19.3 · TypeScript strict · Tailwind **v4** (CSS `@theme`, no config file) · Prisma **7** (`prisma-client` generator, `prisma7.config.ts`, generated client in `generated/`) + `@neondatabase/serverless` · Better Auth · LiveKit · Groq · Upstash · AWS S3 SDK (Neon S3 endpoint) |
 | **Node** | Local **v20.20.2** — some installed packages warn they want Node ≥ 22 (`machina`, `@prisma/streams-local`). Non-blocking now; if Prisma tooling misbehaves, switch to Node 22 LTS (also matches Vercel builds). |
 | **Original idea** | [`BLUEPRINT-ORIGINAL.md`](./docs/BLUEPRINT-ORIGINAL.md) — kept for provenance; **superseded** by this doc set (§6 errata). |
@@ -71,6 +71,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | [`code-complexity-and-quality.md`](./docs/code-complexity-and-quality.md) | tests, CI, complexity budgets, Definition of Done |
 | [`pull-request-guidelines.md`](./docs/pull-request-guidelines.md) | opening/reviewing PRs |
 | [`GITFLOW.md`](./docs/GITFLOW.md) | branching, commits, Neon preview branches, merges |
+| [`ci-cd.md`](./docs/ci-cd.md) | CI jobs, deploy pipeline, secrets, branch protection |
+| [`CONTRIBUTING.md`](./docs/CONTRIBUTING.md) | contributor setup and the proper contribution path |
+| [`SECURITY.md`](./docs/SECURITY.md) | private vulnerability reporting and security rules |
+| [`CODE_OF_CONDUCT.md`](./docs/CODE_OF_CONDUCT.md) | community standards and enforcement |
 | [`subagent-team.md`](./docs/subagent-team.md) | assigning/spawning agents, handoff packets, phases |
 | [`BLUEPRINT-ORIGINAL.md`](./docs/BLUEPRINT-ORIGINAL.md) | only for provenance — **§6 errata overrides it** |
 
@@ -82,7 +86,7 @@ Conflict rule: two docs disagree → fix **both** in one docs PR, never pick sil
 npm run dev            # next dev — also (re)writes the agent-rules block above
 npm run build          # next build (typecheck included)
 npm run lint           # eslint
-npx tsc --noEmit       # typecheck (also run before PR)
+npm run typecheck      # next typegen + tsc (also run before PR)
 npm test               # vitest (unit; test:watch for dev loop)
 npx prisma validate    # after schema edits (needs a DATABASE_URL — CI uses a placeholder)
 npm run db:migrate     # local, on Neon `dev` branch only
@@ -146,7 +150,8 @@ npx prisma generate    # already runs via postinstall
 | 5 | STT pipeline (VAD → Groq → DataChannel) | ✅ verified — proxy, worklet, DataChannel broadcast |
 | 6 | Recording (multipart → playback) | ✅ verified — MediaRecorder, presigned parts, Neon Storage |
 | 7 | Quota guards + ratelimits + polish | ✅ verified — rate limits, quota guards, budget chip, recordings list |
-| 8 | Tests + CI + demo GIF | ⬜ |
+| 8 | Tests + CI/CD + contributor infrastructure | ✅ verified — 70 tests, `quality` + `build` required checks, CodeQL, Dependabot, Vercel deploy workflow |
+| 8b | Demo GIF | ⬜ optional |
 
 **Definition of Done:** [`code-complexity-and-quality.md` §8](./docs/code-complexity-and-quality.md) · **Agent workflow:** [`subagent-team.md`](./docs/subagent-team.md) · **Phase 2 kickoff:** schema per `database-and-security.md` §2, Better Auth per §3.
 

@@ -66,7 +66,7 @@ docs(arch): correct LiveKit free-tier numbers (5,000 participant-min)
 
 ## Release flow
 
-- `main` is always deployable (Vercel auto-deploys on merge).
+- `main` is always deployable. Vercel auto-deploys on merge (Git integration); the optional `Deploy` workflow does a CLI deploy after CI passes when `VERCEL_TOKEN` is configured — see [`ci-cd.md`](./ci-cd.md).
 - Tag releases when a demo milestone is reached: `v0.1.0-auth`, `v0.2.0-studio`, `v0.3.0-captions`, `v1.0.0-demo`.
 - A release = tag + GitHub Release with a 5-line changelog + demo GIF.
 - Hotfix: branch from `main` → `fix/<slug>` → PR → merge → redeploy (same rules, no bypass).
@@ -76,9 +76,16 @@ docs(arch): correct LiveKit free-tier numbers (5,000 participant-min)
 - Target **≤ 400 changed lines** per PR (excluding lockfiles/generated files). Split larger work — see [`pull-request-guidelines.md`](./pull-request-guidelines.md).
 - Docs-only PRs are encouraged and cheap: they still get reviewed against [`AGENTS.md`](../AGENTS.md) facts (don't reintroduce corrected numbers).
 
-## Branch protection checklist (GitHub settings, when repo is public)
+## Branch protection (live: ruleset `main-protection`)
 
-- [ ] Require PR before merge
-- [ ] Require status checks: `typecheck`, `lint`, `test`, `build`
-- [ ] Dismiss stale reviews on new commits
-- [ ] No force-pushes to `main`
+Configured on GitHub and enforced for `main`:
+
+- [x] Require a pull request before merge (0 approvals — the checklist and CI are the gate)
+- [x] Required status checks: **`quality`** and **`build`** (from `.github/workflows/ci.yml`)
+- [x] Required linear history
+- [x] No force-pushes / no branch deletion
+- [x] **Squash merge only** (merge commits and rebase merges disabled)
+- [x] Delete the branch after merge
+- [x] Admin bypass reserved for emergencies (hotfixes still get a retroactive PR)
+
+CI/CD details, secrets, and troubleshooting: [`ci-cd.md`](./ci-cd.md).

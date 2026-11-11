@@ -1,6 +1,8 @@
 # Pull Request Guidelines — Synthetix Engine
 
 > Small, reviewable, documented PRs. Same rules for humans and AI agents — no exceptions for "just a quick change".
+>
+> New here? Start with [`CONTRIBUTING.md`](./CONTRIBUTING.md); this file is the review contract.
 
 ---
 
@@ -8,7 +10,7 @@
 
 - Branch from updated `main` ([GITFLOW](./GITFLOW.md) naming: `feat|fix|docs|chore|refactor/<slug>`).
 - Self-review the diff first — you are the first reviewer.
-- CI green locally: `npm run lint && npx tsc --noEmit && npm test && npm run build`.
+- CI green locally: `npm run lint && npm run typecheck && npm test && npm run build`.
 
 ## 2. Size limits
 

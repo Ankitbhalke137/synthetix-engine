@@ -48,17 +48,26 @@ Rules:
 
 ## 4. CI pipeline (GitHub Actions — Phase 8)
 
-```yaml
-# conceptual — job graph
-PR:  [typecheck] [lint] [unit] [prisma-validate]  →  [build]  →  merge gate
-main: same + [e2e] + [bundle-budget]
+Two required jobs run in parallel on every PR and every push to `main`:
+
+```
+quality:  checkout → setup-node → npm ci → prisma generate → prisma validate
+          → lint → tsc --noEmit → vitest
+build:    checkout → setup-node → npm ci → next build
 ```
 
-- Concurrency: cancel superseded runs on the same PR.
-- Node matrix: 20 (matches local) — Vercel build is source of truth for prod parity.
-- `prisma validate` + `prisma generate` freshness check (schema changed without migration → fail).
-- Artifacts: coverage report, bundle size comment on PR.
-- Branch protection requires all checks ([GITFLOW](./GITFLOW.md) §merge rules).
+- Concurrency: superseded runs on the same ref are cancelled.
+- Node 20 (matches local) — the Vercel build is the production parity check.
+- `prisma validate` + `prisma generate` catch schema changes without a migration.
+- Safe placeholder env values keep forks and first-time contributors green
+  without exposing secrets.
+- Branch protection requires **`quality`** and **`build`**
+  ([GITFLOW](./GITFLOW.md) §branch protection).
+- Deploy runs only after `quality` + `build` succeed on `main`
+  ([ci-cd.md](./ci-cd.md)).
+- CodeQL runs on PRs/pushes and weekly; Dependabot opens weekly update PRs.
+- Planned (not yet implemented): coverage artifacts, bundle-size comments,
+  Playwright e2e on `main` + nightly.
 
 ## 5. Review checklist (human or Reviewer agent — applies to every PR)
 
@@ -93,7 +102,7 @@ main: same + [e2e] + [bundle-budget]
 ## 8. Definition of Done (per feature)
 
 1. Code + tests (per §3) green locally.
-2. `npm run lint && npx tsc --noEmit && npm run build` green.
+2. `npm run lint && npm run typecheck && npm run build` green.
 3. Docs touched wherever behavior/decisions changed (checklist in PR template).
 4. New env vars → `.env.example` + `AGENTS.md` env table.
 5. Complexity budgets hold.

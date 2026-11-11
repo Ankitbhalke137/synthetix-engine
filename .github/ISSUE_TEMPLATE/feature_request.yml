@@ -1,0 +1,65 @@
+name: Feature request
+description: Suggest a new capability or an improvement.
+title: "feat: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Synthetix Engine is deliberately scoped — please
+        check `docs/synthetix-engine-prd.md` (and its non-goals) before filing.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem does this solve? Describe the pain, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Which PRD priority does this fit?
+      options:
+        - P0 — demo-critical
+        - P1 — post-demo polish
+        - P2 — nice to have
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: free-tie
+    attributes:
+      label: Free-tier impact
+      description: Would this add vendor calls, storage, or participant-minutes?
+      placeholder: "e.g. +1 Groq request per caption chunk"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I read the PRD non-goals and believe this is in scope.
+          required: true
