@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 
 import type { Role } from "@/lib/room-policy";
+import { ControlBar } from "./ControlBar";
 import { ROLE_LABEL } from "./labels";
 import { useStudioRoom, type StudioPreferences } from "./useStudioRoom";
 import { VideoGrid } from "./VideoGrid";
@@ -23,8 +25,45 @@ export function StudioSession({
   viewer: { name: string; role: Role };
   preferences: StudioPreferences;
 }) {
-  const { status, error, mediaBlocked, participants, activeSpeaker, retry, leave } =
-    useStudioRoom(room.slug, preferences);
+  const {
+    status,
+    error,
+    mediaBlocked,
+    mediaBusy,
+    participants,
+    activeSpeaker,
+    retry,
+    leave,
+    toggleMicrophone,
+    toggleCamera,
+  } = useStudioRoom(room.slug, preferences);
+
+  const local = participants.find((participant) => participant.isLocal);
+  const microphoneEnabled = local?.isMicrophoneEnabled ?? false;
+  const cameraEnabled = local?.isCameraEnabled ?? false;
+
+  // M is the only device shortcut here; C belongs to captions (next slice).
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      const target = event.target;
+      const typing =
+        target instanceof HTMLElement &&
+        (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
+      if (!typing && event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        toggleMicrophone();
+      }
+    }
+
+    window.addEventListener("keydown", handleShortcut);
+
+    return () => {
+      window.removeEventListener("keydown", handleShortcut);
+    };
+  }, [toggleMicrophone]);
 
   return (
     <div className="flex h-dvh flex-col bg-bg">
@@ -77,8 +116,8 @@ export function StudioSession({
 
       {mediaBlocked ? (
         <p role="status" className="border-b border-border bg-surface px-4 py-2 text-sm text-text-muted">
-          Camera or microphone access was blocked, so you joined without publishing. Allow access in
-          your browser, then rejoin.
+          Camera or microphone access was blocked. Allow access in your browser, then use the
+          control again.
         </p>
       ) : null}
 
@@ -107,6 +146,20 @@ export function StudioSession({
           <VideoGrid participants={participants} activeSpeaker={activeSpeaker} status={status} />
         )}
       </main>
+
+      {status === "error" ? null : (
+        <footer className="border-t border-border bg-surface px-4 py-3">
+          <ControlBar
+            microphoneEnabled={microphoneEnabled}
+            cameraEnabled={cameraEnabled}
+            busy={mediaBusy}
+            disabled={status !== "connected"}
+            onToggleMicrophone={toggleMicrophone}
+            onToggleCamera={toggleCamera}
+            onLeave={() => void leave()}
+          />
+        </footer>
+      )}
     </div>
   );
 }
