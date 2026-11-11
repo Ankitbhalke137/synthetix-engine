@@ -90,12 +90,14 @@ function messageFrom(payload: unknown): string {
   return "Could not join this room.";
 }
 
+export type StudioPreferences = { microphone: boolean; camera: boolean };
+
 /**
  * Owns the LiveKit connection for one studio session: token fetch → connect →
  * event-driven roster → cleanup. The room is disconnected on unmount and on
  * retry, so a failed join never leaves a dangling socket.
  */
-export function useStudioRoom(slug: string) {
+export function useStudioRoom(slug: string, preferences: StudioPreferences) {
   const router = useRouter();
   const roomRef = useRef<Room | null>(null);
   const leavingRef = useRef(false);
@@ -179,12 +181,14 @@ export function useStudioRoom(slug: string) {
         if (disposed) return;
         setStatus("connected");
 
-        // Publish by default for now; the pre-join screen moves this choice to
-        // the user in the next slice. A denial must not drop the connection.
-        const media = await Promise.allSettled([
-          room.localParticipant.setCameraEnabled(true),
-          room.localParticipant.setMicrophoneEnabled(true),
-        ]);
+        // Publish only what the pre-join screen asked for. A denial must not
+        // drop the connection — it becomes a banner and the room still works.
+        const requests: Promise<unknown>[] = [];
+
+        if (preferences.camera) requests.push(room.localParticipant.setCameraEnabled(true));
+        if (preferences.microphone) requests.push(room.localParticipant.setMicrophoneEnabled(true));
+
+        const media = await Promise.allSettled(requests);
 
         if (disposed) return;
         if (media.some((result) => result.status === "rejected")) setMediaBlocked(true);
@@ -205,7 +209,7 @@ export function useStudioRoom(slug: string) {
       roomRef.current = null;
       void room.disconnect();
     };
-  }, [slug, attempt]);
+  }, [slug, attempt, preferences.camera, preferences.microphone]);
 
   const retry = useCallback(() => {
     setError(null);
