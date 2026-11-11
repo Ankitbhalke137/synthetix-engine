@@ -101,7 +101,7 @@ Fill `.env.local` (pooled `DATABASE_URL`, LiveKit key/secret/URL), run `npm run 
 | 4 | Studio UI: video grid, controls, transcript rail | ✅ verified — pre-join, grid, mic/cam controls, responsive transcript rail |
 | 5 | STT pipeline: worklet → VAD → Groq → DataChannel | ✅ verified — proxy, VAD worklet, LiveKit broadcast |
 | 6 | Recording: MediaRecorder → multipart presigned upload | ✅ verified — capture, presigned parts, Neon Storage |
-| 7 | Quota guards, rate limits, error/empty states | ⬜ |
+| 7 | Quota guards, rate limits, error/empty states | ✅ verified — rate limits, quota guards, budget chip, recordings list |
 | 8 | Tests, CI, README demo GIF | ⬜ |
 
 ## Errata vs the original blueprint
