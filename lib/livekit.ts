@@ -1,6 +1,12 @@
 import "server-only";
 
-import { AccessToken } from "livekit-server-sdk";
+import {
+  AccessToken,
+  DataPacket_Kind,
+  RoomServiceClient,
+  TrackSource,
+  TrackType,
+} from "livekit-server-sdk";
 
 import { getEnv } from "@/lib/env";
 import { canPublish, type Role, tokenMetadata } from "@/lib/room-policy";
@@ -52,4 +58,90 @@ export async function mintRoomToken(input: RoomTokenInput): Promise<string> {
   });
 
   return token.toJwt();
+}
+
+/**
+ * Server-side room control (moderation). The client SDK cannot delete rooms or
+ * remove participants; only the server API can, which is why every moderation
+ * action re-checks the caller's role before reaching these helpers.
+ */
+function getRoomService(): RoomServiceClient {
+  const env = getEnv();
+  // LiveKit's server API is HTTPS even though clients connect over WSS.
+  const host = getLiveKitUrl().replace(/^wss:\/\//, "https://").replace(/^ws:\/\//, "http://");
+
+  return new RoomServiceClient(host, env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET);
+}
+
+/** LiveKit returns 404 for rooms that are already gone — an idempotent no-op. */
+function isNotFound(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+
+  const code = Reflect.get(error, "code") ?? Reflect.get(error, "status");
+  return code === 404 || code === "404" || code === "not_found" || code === "NOT_FOUND";
+}
+
+/** End the LiveKit room for everyone. Safe to call twice. */
+export async function endLiveKitRoom(roomName: string): Promise<void> {
+  try {
+    await getRoomService().deleteRoom(roomName);
+  } catch (error) {
+    if (!isNotFound(error)) throw error;
+  }
+}
+
+/** Disconnect one participant. Safe to call twice. */
+export async function removeLiveKitParticipant(
+  roomName: string,
+  identity: string,
+): Promise<void> {
+  try {
+    await getRoomService().removeParticipant(roomName, identity);
+  } catch (error) {
+    if (!isNotFound(error)) throw error;
+  }
+}
+
+/**
+ * Mute a participant's published microphone track. Returns false when the
+ * participant is not connected or has no microphone publication.
+ */
+export async function muteLiveKitMicrophone(
+  roomName: string,
+  identity: string,
+): Promise<boolean> {
+  let participants;
+
+  try {
+    participants = await getRoomService().listParticipants(roomName);
+  } catch (error) {
+    if (isNotFound(error)) return false;
+    throw error;
+  }
+
+  const target = participants.find((participant) => participant.identity === identity);
+  const microphone = target?.tracks.find(
+    (track) => track.source === TrackSource.MICROPHONE || track.type === TrackType.AUDIO,
+  );
+
+  if (!target || !microphone) return false;
+
+  await getRoomService().mutePublishedTrack(roomName, identity, microphone.sid, true);
+  return true;
+}
+
+/**
+ * Send a server-authored control frame. The client ignores data frames that
+ * carry a sender participant, so peers cannot spoof a room-ended/kicked event.
+ */
+export async function sendLiveKitEvent(
+  roomName: string,
+  event: { type: "room-ended" } | { type: "kicked"; identity: string },
+  destinationIdentities?: string[],
+): Promise<void> {
+  const data = new TextEncoder().encode(JSON.stringify({ v: 1, ...event }));
+
+  await getRoomService().sendData(roomName, data, DataPacket_Kind.RELIABLE, {
+    ...(destinationIdentities ? { destinationIdentities } : {}),
+  });
 }
