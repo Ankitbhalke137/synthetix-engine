@@ -1,24 +1,8 @@
 "use client";
 
 import type { StudioParticipant } from "./useStudioRoom";
+import { avatarColor, initials } from "./avatar";
 import { AttachedAudio, AttachedVideo } from "./MediaTrack";
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2);
-
-  return parts.map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
-}
-
-/** Deterministic hue so the same identity keeps the same avatar colour. */
-function hueFor(identity: string): number {
-  let hash = 0;
-
-  for (const character of identity) {
-    hash = (hash * 31 + character.charCodeAt(0)) % 360;
-  }
-
-  return hash;
-}
 
 function MicIcon({ muted }: { muted: boolean }) {
   return (
@@ -64,7 +48,7 @@ export function ParticipantTile({
           <span
             aria-hidden
             className="grid size-16 place-items-center rounded-full font-mono text-lg font-semibold text-text"
-            style={{ backgroundColor: `oklch(0.34 0.07 ${hueFor(participant.identity)})` }}
+            style={{ backgroundColor: avatarColor(participant.identity) }}
           >
             {initials(participant.name)}
           </span>
