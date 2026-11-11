@@ -1,0 +1,106 @@
+name: Deploy
+
+# Continuous deployment to Vercel.
+#
+# Two supported paths:
+#   1. Vercel Git integration (default, zero config): connect the repository in
+#      the Vercel dashboard and every push to main deploys automatically. This
+#      workflow then no-ops with a notice.
+#   2. CLI deploy (opt-in): add the repository secrets below and this workflow
+#      deploys only after the CI workflow succeeds on main.
+#
+# Required secrets for CLI deploy:
+#   VERCEL_TOKEN        — https://vercel.com/account/tokens
+#   VERCEL_ORG_ID       — optional, defaults to this repo's project
+#   VERCEL_PROJECT_ID   — optional, defaults to this repo's project
+#   DIRECT_DATABASE_URL — optional direct (non-pooled) Neon URL for migrations
+#   DATABASE_URL        — fallback for migrations when DIRECT_DATABASE_URL is absent
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || 'team_AT3k3mxRkz5eJ3OHOuvBgmYN' }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || 'prj_ZLr1JMmcJHBxsKxptMUhjh21VR8b' }}
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Check deployment configuration
+        id: config
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -n "$VERCEL_TOKEN" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Vercel CLI deployment is configured."
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Deploy skipped::VERCEL_TOKEN is not set. Connect the repo in the Vercel dashboard for automatic Git-based deployments, or add VERCEL_TOKEN as a repository secret."
+          fi
+
+      - name: Install dependencies
+        if: steps.config.outputs.configured == 'true'
+        run: npm ci
+
+      - name: Apply database migrations
+        if: steps.config.outputs.configured == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          MIGRATION_URL: ${{ secrets.DIRECT_DATABASE_URL || secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$MIGRATION_URL" ]; then
+            echo "::notice title=Migrations skipped::No DIRECT_DATABASE_URL or DATABASE_URL secret is set."
+            exit 0
+          fi
+          DATABASE_URL="$MIGRATION_URL" npx prisma migrate deploy
+
+      - name: Install Vercel CLI
+        if: steps.config.outputs.configured == 'true'
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        if: steps.config.outputs.configured == 'true'
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build project artifacts
+        if: steps.config.outputs.configured == 'true'
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to production
+        if: steps.config.outputs.configured == 'true'
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
