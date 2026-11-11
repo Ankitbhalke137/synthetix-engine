@@ -9,14 +9,34 @@ export type RecordingState = "idle" | "recording" | "uploading" | "stopping" | "
 export type UploadedPart = { PartNumber: number; ETag: string };
 
 /**
+ * S3/Neon rejects every non-final multipart part smaller than 5 MiB
+ * (`EntityTooSmall`). MediaRecorder slices are far smaller than that, so bytes
+ * are buffered here until a full part is available.
+ */
+const MIN_PART_BYTES = 5 * 1024 * 1024;
+
+/** How often MediaRecorder hands us a blob. Small slices keep memory flat. */
+const SLICE_MS = 1_000;
+
+/** Preferred container/codec order. Opus in WebM is the universal choice. */
+const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
  * useRecording — host-side recording via MediaRecorder + presigned multipart
  * upload to Neon Object Storage.
  *
  * Flow:
- *  1. start() → create MediaStream from local mic track → MediaRecorder(10s slices)
+ *  1. start() → wrap the published mic track in a MediaStream → MediaRecorder
  *     → POST /api/storage/presigned/init → uploadId
- *  2. ondataavailable → POST /api/storage/presigned/part → PUT blob → record ETag
- *  3. stop() → mediaRecorder.stop() → POST /api/storage/complete → Recording row
+ *  2. ondataavailable → buffer bytes until ≥ 5 MiB → POST presigned/part →
+ *     PUT the part directly to Neon (sequential queue, ordered by part number)
+ *  3. stop() → flush the final (possibly small) part → await the queue →
+ *     POST /api/storage/complete with mimeType/size/duration → Recording row
+ *
+ * The recorder wraps the LiveKit track rather than capturing the device again,
+ * and it never calls `track.stop()`: that would end the call's microphone.
  *
  * Permission denial, unsupported browser, or upload failures degrade
  * gracefully — the call continues without recording.
@@ -37,238 +57,295 @@ export function useRecording({
   const [partCount, setPartCount] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const uploadIdRef = useRef<string | null>(null);
   const recordingIdRef = useRef<string | null>(null);
+  const uploadIdRef = useRef<string | null>(null);
+  const mimeTypeRef = useRef<string>("audio/webm");
+
   const partsRef = useRef<UploadedPart[]>([]);
-  const partNumberRef = useRef(0);
+  const nextPartNumberRef = useRef(1);
+
+  // Bytes waiting for a full part. Flushed when they reach MIN_PART_BYTES or
+  // when the recording stops.
+  const pendingBlobsRef = useRef<Blob[]>([]);
+  const pendingBytesRef = useRef(0);
+  const totalBytesRef = useRef(0);
+
+  // Parts upload one at a time, in part-number order. The chain always
+  // resolves; the first failure is latched in uploadErrorRef.
+  const uploadChainRef = useRef<Promise<void>>(Promise.resolve());
+  const uploadErrorRef = useRef<string | null>(null);
+
+  const startedAtRef = useRef(0);
   const abortRef = useRef(false);
 
   const clearError = useCallback(() => setError(null), []);
 
-  // Upload a single part with retry on expired URLs (403/410).
-  // The implementation lives in a ref so the recursive self-call never
-  // touches the component render cycle.
-  const uploadPartWithRetryRef = useRef<(
-    blob: Blob,
-    partNumber: number,
-    attempt: number,
-  ) => Promise<void> | null>(null);
+  const resetSession = useCallback(() => {
+    partsRef.current = [];
+    nextPartNumberRef.current = 1;
+    pendingBlobsRef.current = [];
+    pendingBytesRef.current = 0;
+    totalBytesRef.current = 0;
+    uploadChainRef.current = Promise.resolve();
+    uploadErrorRef.current = null;
+    recordingIdRef.current = null;
+    uploadIdRef.current = null;
+    setPartCount(0);
+  }, []);
 
-  useEffect(() => {
-    uploadPartWithRetryRef.current = async (blob, partNumber, attempt) => {
-      if (attempt > 3 || abortRef.current) return;
+  /**
+   * Presign + PUT one part, retrying with a fresh URL when the presigned URL
+   * expires (403/410) or the network hiccups.
+   */
+  const uploadPart = useCallback(
+    async (blob: Blob, partNumber: number): Promise<void> => {
+      const recordingId = recordingIdRef.current;
+      const uploadId = uploadIdRef.current;
 
-      // Wait briefly before retrying.
-      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
-
-      try {
-        const presignResponse = await fetch("/api/storage/presigned/part", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            roomId,
-            recordingId: recordingIdRef.current!,
-            partNumber,
-            uploadId: uploadIdRef.current!,
-          }),
-        });
-
-        if (!presignResponse.ok) {
-          await uploadPartWithRetryRef.current?.(blob, partNumber, attempt + 1);
-          return;
-        }
-
-        const { url } = (await presignResponse.json()) as { url: string };
-        const putResponse = await fetch(url, { method: "PUT", body: blob });
-
-        if ((putResponse.status === 403 || putResponse.status === 410) && attempt < 3) {
-          await uploadPartWithRetryRef.current?.(blob, partNumber, attempt + 1);
-          return;
-        }
-
-        if (!putResponse.ok) {
-          setError(`Upload failed after ${attempt} retries.`);
-          setState("idle");
-          return;
-        }
-
-        const etag = putResponse.headers.get("etag") ?? "";
-        partsRef.current.push({ PartNumber: partNumber, ETag: etag });
-        setPartCount(partsRef.current.length);
-      } catch {
-        await uploadPartWithRetryRef.current?.(blob, partNumber, attempt + 1);
+      if (!recordingId || !uploadId) {
+        throw new Error("Recording upload is not initialised.");
       }
-    };
-  }, [roomId]);
 
-  const uploadPartWithRetry = useCallback(
-    (blob: Blob, partNumber: number, attempt: number) => {
-      return uploadPartWithRetryRef.current?.(blob, partNumber, attempt);
+      let lastError: unknown = null;
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (abortRef.current) return;
+        if (attempt > 0) await sleep(500 * attempt);
+
+        try {
+          const presignResponse = await fetch("/api/storage/presigned/part", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ roomId, recordingId, partNumber, uploadId }),
+          });
+
+          if (!presignResponse.ok) {
+            lastError = new Error(`Presign failed (${presignResponse.status}).`);
+            continue;
+          }
+
+          const { url } = (await presignResponse.json()) as { url: string };
+          const putResponse = await fetch(url, {
+            method: "PUT",
+            body: blob,
+            headers: { "content-type": mimeTypeRef.current },
+          });
+
+          if (putResponse.status === 403 || putResponse.status === 410) {
+            // The presigned URL expired — mint a new one and retry.
+            lastError = new Error("Upload URL expired.");
+            continue;
+          }
+
+          if (!putResponse.ok) {
+            lastError = new Error(`Upload failed (${putResponse.status}).`);
+            continue;
+          }
+
+          const etag = putResponse.headers.get("etag");
+
+          if (!etag) {
+            throw new Error("Storage did not return an ETag for this part.");
+          }
+
+          partsRef.current.push({ PartNumber: partNumber, ETag: etag });
+          setPartCount(partsRef.current.length);
+          return;
+        } catch (caught) {
+          lastError = caught;
+        }
+      }
+
+      throw lastError instanceof Error ? lastError : new Error("Upload failed.");
     },
-    [],
+    [roomId],
   );
+
+  /**
+   * Move whatever is buffered into one part and queue its upload. Called when
+   * the buffer reaches the 5 MiB floor, and once more on stop for the final
+   * (smaller) part.
+   */
+  const flushPendingPart = useCallback(() => {
+    if (pendingBytesRef.current === 0) return;
+
+    const blob = new Blob(pendingBlobsRef.current, { type: mimeTypeRef.current });
+    pendingBlobsRef.current = [];
+    pendingBytesRef.current = 0;
+    totalBytesRef.current += blob.size;
+
+    const partNumber = nextPartNumberRef.current;
+    nextPartNumberRef.current += 1;
+
+    setState((current) => (current === "recording" ? "uploading" : current));
+
+    uploadChainRef.current = uploadChainRef.current
+      .then(() => uploadPart(blob, partNumber))
+      .catch((caught: unknown) => {
+        uploadErrorRef.current ??=
+          caught instanceof Error ? caught.message : "Recording upload failed.";
+      });
+  }, [uploadPart]);
 
   // --- start recording -----------------------------------------------------
 
   const start = useCallback(async () => {
     if (!isHost || !isConnected || !audioTrack) return;
+
     if (typeof MediaRecorder === "undefined") {
       setError("Your browser does not support recording.");
+      setState("error");
       return;
     }
 
-    setError(null);
-    setState("recording");
-    partsRef.current = [];
-    partNumberRef.current = 0;
+    resetSession();
     abortRef.current = false;
+    setError(null);
 
     try {
-      // Build a MediaStream from the local mic track.
+      const mimeType = MIME_CANDIDATES.find((candidate) =>
+        MediaRecorder.isTypeSupported(candidate),
+      );
+
+      if (!mimeType) {
+        throw new Error("This browser cannot record Opus audio.");
+      }
+
+      // Wrap the already-published track. Do not call getUserMedia again and
+      // never stop this track — LiveKit owns it for the duration of the call.
       const stream = new MediaStream([audioTrack.mediaStreamTrack]);
-      streamRef.current = stream;
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType,
+        audioBitsPerSecond: 64_000,
+      });
+
+      mediaRecorderRef.current = mediaRecorder;
+      mimeTypeRef.current = mediaRecorder.mimeType || mimeType;
 
       const recordingId = crypto.randomUUID();
       recordingIdRef.current = recordingId;
 
-      // Initiate the multipart upload on the server.
       const initResponse = await fetch("/api/storage/presigned/init", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          roomId,
-          recordingId,
-          mimeType: "audio/webm",
-        }),
+        body: JSON.stringify({ roomId, recordingId, mimeType: mimeTypeRef.current }),
       });
 
       if (!initResponse.ok) {
-        const body = (await initResponse.json().catch(() => null)) as { error?: { message?: string } } | null;
+        const body = (await initResponse.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
         throw new Error(body?.error?.message ?? "Failed to start recording upload.");
       }
 
       const { uploadId } = (await initResponse.json()) as { uploadId: string };
       uploadIdRef.current = uploadId;
 
-      // MediaRecorder fires ondataavailable every timeslice ms.
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-      mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.ondataavailable = async (event: BlobEvent) => {
+      mediaRecorder.ondataavailable = (event: BlobEvent) => {
         if (abortRef.current || !event.data || event.data.size === 0) return;
 
-        setState("uploading");
-        partNumberRef.current += 1;
-        const partNumber = partNumberRef.current;
+        pendingBlobsRef.current.push(event.data);
+        pendingBytesRef.current += event.data.size;
 
-        try {
-          // Presign a PUT URL for this part.
-          const presignResponse = await fetch("/api/storage/presigned/part", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              roomId,
-              recordingId,
-              partNumber,
-              uploadId,
-            }),
-          });
-
-          if (!presignResponse.ok) {
-            throw new Error(`Presign failed: ${presignResponse.status}`);
-          }
-
-          const { url } = (await presignResponse.json()) as { url: string };
-
-          // PUT the part directly to Neon.
-          const putResponse = await fetch(url, {
-            method: "PUT",
-            body: event.data,
-            headers: { "content-type": "audio/webm" },
-          });
-
-          if (!putResponse.ok) {
-            // 403/410 = expired URL; retry via uploadPartWithRetry.
-            if (putResponse.status === 403 || putResponse.status === 410) {
-              await uploadPartWithRetry(event.data, partNumber, 1);
-              return;
-            }
-            throw new Error(`Upload failed: ${putResponse.status}`);
-          }
-
-          const etag = putResponse.headers.get("etag") ?? "";
-          partsRef.current.push({ PartNumber: partNumber, ETag: etag });
-          setPartCount(partsRef.current.length);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Upload failed.");
-          setState("idle");
+        if (pendingBytesRef.current >= MIN_PART_BYTES) {
+          flushPendingPart();
         }
       };
 
       mediaRecorder.onerror = () => {
-        setError("MediaRecorder error.");
-        setState("idle");
+        setError("The recorder stopped unexpectedly.");
+        setState("error");
       };
 
-      mediaRecorder.start(10_000); // 10 s slices
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start recording.");
-      setState("idle");
+      startedAtRef.current = Date.now();
+      mediaRecorder.start(SLICE_MS);
+      setState("recording");
+    } catch (caught) {
+      mediaRecorderRef.current = null;
+      setError(caught instanceof Error ? caught.message : "Failed to start recording.");
+      setState("error");
     }
-  }, [roomId, audioTrack, isHost, isConnected, uploadPartWithRetry]);
+  }, [roomId, audioTrack, isHost, isConnected, flushPendingPart, resetSession]);
 
   // --- stop recording ------------------------------------------------------
 
   const stop = useCallback(async () => {
-    if (!mediaRecorderRef.current) return;
+    const mediaRecorder = mediaRecorderRef.current;
 
-    abortRef.current = false;
+    if (!mediaRecorder) return;
+
     setState("stopping");
+    abortRef.current = false;
 
     try {
-      mediaRecorderRef.current.stop();
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+      // `stop` fires one last `dataavailable` and then `stop`; waiting for the
+      // stop event guarantees the final bytes are buffered before we flush.
+      await new Promise<void>((resolve) => {
+        mediaRecorder.addEventListener("stop", () => resolve(), { once: true });
+        mediaRecorder.stop();
+      });
 
       mediaRecorderRef.current = null;
-      streamRef.current = null;
 
-      // Wait for the final ondataavailable to complete, then complete.
-      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      // Flush the tail as the final part, then wait for every queued PUT.
+      flushPendingPart();
+      await uploadChainRef.current;
 
-      const uploadId = uploadIdRef.current;
       const recordingId = recordingIdRef.current;
-      const parts = [...partsRef.current];
+      const uploadId = uploadIdRef.current;
+      const parts = [...partsRef.current].sort((a, b) => a.PartNumber - b.PartNumber);
 
-      if (!uploadId || !recordingId) {
-        setState("idle");
-        return;
+      if (uploadErrorRef.current) {
+        throw new Error(uploadErrorRef.current);
       }
+
+      if (!recordingId || !uploadId || parts.length === 0) {
+        throw new Error("Nothing was captured — the recording was empty.");
+      }
+
+      const durationSec = Math.max(0, Math.round((Date.now() - startedAtRef.current) / 100) / 10);
 
       const completeResponse = await fetch("/api/storage/complete", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ roomId, recordingId, uploadId, parts }),
+        body: JSON.stringify({
+          roomId,
+          recordingId,
+          uploadId,
+          parts,
+          mimeType: mimeTypeRef.current,
+          sizeBytes: totalBytesRef.current,
+          durationSec,
+        }),
       });
 
       if (!completeResponse.ok) {
-        throw new Error(`Complete failed: ${completeResponse.status}`);
+        const body = (await completeResponse.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        throw new Error(body?.error?.message ?? "Failed to finalise the recording.");
       }
 
+      resetSession();
       setState("idle");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to complete recording.");
-      setState("idle");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to complete recording.");
+      setState("error");
     }
-  }, [roomId]);
+  }, [roomId, flushPendingPart, resetSession]);
 
   // --- cleanup on unmount --------------------------------------------------
 
   useEffect(() => {
     return () => {
       abortRef.current = true;
-      mediaRecorderRef.current?.stop();
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+
+      const mediaRecorder = mediaRecorderRef.current;
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+      // Deliberately no `track.stop()`: the wrapped track belongs to LiveKit.
+      mediaRecorderRef.current = null;
     };
   }, []);
 

@@ -8,8 +8,8 @@ import { getSession } from "@/lib/session";
  * POST /api/storage/presigned/part
  *
  * Presign a PUT URL for one part of a multipart upload. Authz: authenticated +
- * room member. The client PUTs the part bytes directly to Neon — this server
- * never sees the audio.
+ * room member + host — matching init and complete, so only the recorder can
+ * mint upload URLs. The client PUTs the part bytes directly to Neon.
  */
 const PartRequestSchema = z
   .object({
@@ -26,7 +26,7 @@ function errorResponse(status: number, code: string, message: string): Response 
   return Response.json({ error: { code, message } }, { status, headers: NO_STORE });
 }
 
-async function requireRoomMember(roomId: string, userId: string) {
+async function requireRoomHost(roomId: string, userId: string) {
   const room = await getPrisma().room.findUnique({
     where: { id: roomId },
     select: { id: true },
@@ -41,8 +41,8 @@ async function requireRoomMember(roomId: string, userId: string) {
     select: { role: true },
   });
 
-  if (!participant) {
-    throw errorResponse(403, "FORBIDDEN", "You are not a member of this room.");
+  if (!participant || participant.role !== "host") {
+    throw errorResponse(403, "FORBIDDEN", "Only the host can upload recording parts.");
   }
 
   return { room };
@@ -63,7 +63,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    await requireRoomMember(parsed.data.roomId, session.user.id);
+    await requireRoomHost(parsed.data.roomId, session.user.id);
 
     const { url, ttlSeconds } = await presignPutPart({
       uploadId: parsed.data.uploadId,

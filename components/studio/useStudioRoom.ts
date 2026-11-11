@@ -26,10 +26,13 @@ export type StudioParticipant = {
   audioTrack: Track | null;
 };
 
-type TokenResponse = { token: string; url: string };
+type TokenResponse = { token: string; url: string; roomId: string };
 
 /** LiveKit's own retries can leave a join pending; surface it instead of spinning. */
 const CONNECT_TIMEOUT_MS = 20_000;
+
+/** Assumed session length for the preflight budget guard (PRD P0-8). */
+const PREFLIGHT_SESSION_MINUTES = 45;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -123,6 +126,11 @@ export function useStudioRoom(
   const leavingRef = useRef(false);
   const onCaptionRef = useRef<typeof onCaption>(onCaption);
 
+  // Usage metering: the moment the participant actually connected, and which
+  // room. Reported once, on disconnect/unmount, so the monthly budget moves.
+  const joinedAtRef = useRef<number | null>(null);
+  const joinedRoomIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     onCaptionRef.current = onCaption;
   }, [onCaption]);
@@ -166,8 +174,30 @@ export function useStudioRoom(
       sync();
     };
 
+    const reportUsage = () => {
+      const joinedAt = joinedAtRef.current;
+      const joinedRoomId = joinedRoomIdRef.current;
+
+      if (!joinedAt || !joinedRoomId) return;
+
+      joinedAtRef.current = null;
+      joinedRoomIdRef.current = null;
+
+      const participantSeconds = Math.max(0, Math.round((Date.now() - joinedAt) / 1000));
+
+      // `keepalive` lets the request outlive a navigation away from the studio.
+      void fetch("/api/livekit/usage", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ roomId: joinedRoomId, participantSeconds }),
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+
     const onDisconnected = () => {
-      if (disposed || leavingRef.current) return;
+      if (disposed) return;
+      reportUsage();
+      if (leavingRef.current) return;
       setStatus("error");
       setError("The connection ended. Rejoin when you are ready.");
     };
@@ -230,7 +260,28 @@ export function useStudioRoom(
           throw new Error(messageFrom(await response.json().catch(() => null)));
         }
 
-        const { token, url } = (await response.json()) as TokenResponse;
+        const { token, url, roomId } = (await response.json()) as TokenResponse;
+        if (disposed) return;
+
+        // Preflight guard: block the join when the projected session would
+        // exceed the LiveKit free-tier cap. Fail open on network errors.
+        const preflight = await fetch(`/api/preflight/${roomId}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionMinutes: PREFLIGHT_SESSION_MINUTES }),
+        });
+
+        if (preflight.ok) {
+          const guard = (await preflight.json().catch(() => null)) as {
+            allowed?: boolean;
+            message?: string;
+          } | null;
+
+          if (guard && guard.allowed === false) {
+            throw new Error(guard.message ?? "LiveKit quota is exhausted for this month.");
+          }
+        }
+
         if (disposed) return;
 
         await withTimeout(
@@ -239,6 +290,8 @@ export function useStudioRoom(
           "The media server did not respond. Check your connection and try again.",
         );
         if (disposed) return;
+        joinedAtRef.current = Date.now();
+        joinedRoomIdRef.current = roomId;
         setStatus("connected");
 
         // Publish only what the pre-join screen asked for. A denial must not
@@ -265,6 +318,7 @@ export function useStudioRoom(
 
     return () => {
       disposed = true;
+      reportUsage();
       room.removeAllListeners();
       roomRef.current = null;
       void room.disconnect();

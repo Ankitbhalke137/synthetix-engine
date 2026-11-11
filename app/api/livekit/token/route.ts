@@ -68,6 +68,7 @@ export async function POST(request: Request): Promise<Response> {
         token,
         url: getLiveKitUrl(),
         room: { slug: admission.room.slug, name: admission.room.name },
+        roomId: admission.room.id,
         role: admission.role,
         identity: admission.identity,
       },
