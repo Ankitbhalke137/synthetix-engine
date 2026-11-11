@@ -26,9 +26,18 @@ function MicIcon({ muted }: { muted: boolean }) {
 export function ParticipantTile({
   participant,
   promoted,
+  canModerate = false,
+  moderationBusy = false,
+  onMute,
+  onKick,
 }: {
   participant: StudioParticipant;
   promoted: boolean;
+  /** Host/moderator controls for a remote, non-host participant. */
+  canModerate?: boolean;
+  moderationBusy?: boolean;
+  onMute?: () => void;
+  onKick?: () => void;
 }) {
   const showVideo = participant.isCameraEnabled && participant.videoTrack !== null;
 
@@ -54,6 +63,27 @@ export function ParticipantTile({
           </span>
         </div>
       )}
+
+      {canModerate ? (
+        <div className="absolute inset-x-0 top-0 flex items-center justify-end gap-1 bg-linear-to-b from-black/70 to-transparent px-2 pt-2 pb-6">
+          <button
+            type="button"
+            onClick={onMute}
+            disabled={moderationBusy}
+            className="rounded-control border border-white/20 bg-black/40 px-2 py-1 text-[11px] font-semibold text-text transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Mute
+          </button>
+          <button
+            type="button"
+            onClick={onKick}
+            disabled={moderationBusy}
+            className="rounded-control border border-danger/50 bg-danger/20 px-2 py-1 text-[11px] font-semibold text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Remove
+          </button>
+        </div>
+      ) : null}
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-linear-to-t from-black/80 to-transparent px-3 pt-8 pb-2.5">
         <span className="flex min-w-0 items-center gap-1.5">

@@ -89,13 +89,19 @@ Edge rules:
 
 | Op | Input | Checks | Effects |
 |---|---|---|---|
-| `muteParticipant` | `roomId, targetId, persistent: bool` | actor ∈ {host, moderator}, target ≠ host | LiveKit `muteTrack` API + optional `mutedUntil` (P1); `AuditEvent` |
-| `kickParticipant` | `roomId, targetId` | actor ∈ {host, moderator}, target ≠ host | LiveKit `removeParticipant`; `leftAt` set; `AuditEvent` |
+| `muteParticipant` | `roomId, targetIdentity` | actor ∈ {host, moderator}, target ≠ host | LiveKit `mutePublishedTrack`; `AuditEvent` |
+| `kickParticipant` | `roomId, targetIdentity` | actor ∈ {host, moderator}, target ≠ host | server data frame → LiveKit `removeParticipant`; `leftAt` set; `AuditEvent` |
 | `promoteModerator` | `roomId, targetId` | actor = host, target is member with `userId != null` | role update; token refresh signal; `AuditEvent` |
-| `endRoom` | `roomId` | actor ∈ {host, moderator} | state → `ended`, mass disconnect, `AuditEvent` |
+| `endRoom` | `roomId` | actor ∈ {host, moderator} | `status = ended` + `endedAt`, all `leftAt` set, server data frame, LiveKit room delete; `AuditEvent` |
 | `deleteRecording` | `recordingId` | actor = host | status → `deleted`, storage prune queued, `AuditEvent` |
 
 All ops are idempotent (repeat → no-op, 200) and audited. Targets are resolved **through membership**, never by raw client-supplied user id alone.
+
+**Implemented** (`app/actions/moderation.ts` + `lib/livekit.ts`):
+- `muteParticipantAction`, `kickParticipantAction`, `endRoomAction` — session → membership → `can(role, capability)` → target resolved by LiveKit identity (`userId` or `guest:<participantId>`) → DB mutation + `AuditEvent` → LiveKit side effect
+- `endRoomAction` writes `status = ended`, `endedAt` and `leftAt` for everyone **before** touching LiveKit, so a LiveKit API hiccup cannot leave the room joinable
+- control frames (`room-ended`, `kicked`) are sent by the server SDK; the client rejects any data frame that carries a sender participant, which also closes the earlier fake-caption hole
+- host and moderator cannot mute/remove a host or themselves
 
 ## 6. Token claims (LiveKit JWT payload)
 
