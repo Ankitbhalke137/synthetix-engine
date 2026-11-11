@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { CopyLinkButton } from "@/components/CopyLinkButton";
 import type { RoomStatus } from "@/lib/rooms";
 
 const STATUS_STYLES: Record<RoomStatus, { label: string; className: string }> = {
@@ -45,12 +46,19 @@ export function RoomCard({
       </div>
 
       {joinable ? (
-        <Link
-          href={`/studio/${slug}`}
-          className="inline-flex w-fit items-center rounded-control border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:border-accent"
-        >
-          {status === "draft" ? "Open studio" : "Join room"}
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/studio/${slug}`}
+            className="inline-flex w-fit items-center rounded-control border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:border-accent"
+          >
+            {status === "draft" ? "Open studio" : "Join room"}
+          </Link>
+          <CopyLinkButton
+            path={`/studio/${slug}`}
+            label="Copy link"
+            className="inline-flex w-fit items-center rounded-control border border-border px-3 py-1.5 text-sm font-medium text-text-muted transition-colors hover:border-accent hover:text-text"
+          />
+        </div>
       ) : (
         <span className="text-sm text-text-muted">Read-only — playback ships with recordings</span>
       )}

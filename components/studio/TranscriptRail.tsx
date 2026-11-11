@@ -10,9 +10,11 @@ import type { CaptionEntry } from "./useCaptionStream";
  */
 export function TranscriptRail({
   entries,
+  active,
   onClose,
 }: {
   entries: CaptionEntry[];
+  active: boolean;
   onClose: () => void;
 }) {
   return (
@@ -33,8 +35,11 @@ export function TranscriptRail({
           <h2 className="text-sm font-semibold">Transcript</h2>
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1.5 font-mono text-[11px] tracking-[0.06em] text-text-muted uppercase">
-              <span aria-hidden className="size-1.5 rounded-full bg-text-muted" />
-              Captions off
+              <span
+                aria-hidden
+                className={`size-1.5 rounded-full ${active ? "bg-live" : "bg-text-muted"}`}
+              />
+              {active ? "Captions on" : "Captions off"}
             </span>
             <button
               type="button"
@@ -51,8 +56,9 @@ export function TranscriptRail({
             <div className="rounded-panel border border-dashed border-border p-4">
               <p className="text-sm font-medium">No captions yet</p>
               <p className="mt-1 text-sm leading-relaxed text-text-muted">
-                Speech is transcribed server-side and streamed into this rail with speaker names and
-                timestamps. Toggle CC once the caption pipeline is enabled.
+                {active
+                  ? "Speech is transcribed server-side and streamed into this rail with speaker names and timestamps. Captions appear a few seconds after someone speaks."
+                  : "Captions are paused. Turn CC on and unmute your microphone to start transcribing."}
               </p>
             </div>
           ) : (
