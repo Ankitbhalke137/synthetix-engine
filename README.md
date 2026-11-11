@@ -2,7 +2,7 @@
 
 **A browser-based live studio** — multi-guest WebRTC rooms, real-time AI captions, and cloud recordings — engineered to run on a **\$0/month free-tier stack** (Neon · Vercel · LiveKit · Groq · Upstash · Better Auth).
 
-> **Status:** Phase 3 complete ✅ — rooms + LiveKit tokens verified against Neon and LiveKit Cloud. Building Phase 4 (studio UI). Build plan and rules live in [`AGENTS.md`](./AGENTS.md).
+> **Status:** Phase 4 complete ✅ — studio UI verified in a real browser (pre-join → grid → controls → responsive transcript shell). Building Phase 5 (live captions). Build plan and rules live in [`AGENTS.md`](./AGENTS.md).
 
 ---
 
@@ -98,7 +98,7 @@ Fill `.env.local` (pooled `DATABASE_URL`, LiveKit key/secret/URL), run `npm run 
 | 1 | Next.js scaffold + deps + env template | ✅ |
 | 2 | Auth (Better Auth) + Prisma schema on Neon | ✅ live — sign-up/sign-in verified |
 | 3 | Rooms: create/join + LiveKit token issuance | ✅ verified — create/admit/token on real Neon + LiveKit |
-| 4 | Studio UI: video grid, controls, transcript rail | ⬜ |
+| 4 | Studio UI: video grid, controls, transcript rail | ✅ verified — pre-join, grid, mic/cam controls, responsive transcript rail |
 | 5 | STT pipeline: worklet → VAD → Groq → DataChannel | ⬜ |
 | 6 | Recording: MediaRecorder → multipart presigned upload | ⬜ |
 | 7 | Quota guards, rate limits, error/empty states | ⬜ |

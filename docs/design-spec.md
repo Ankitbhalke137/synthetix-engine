@@ -148,3 +148,15 @@ Rules: no spinner without label > 300 ms; optimistic UI for local mute/cam only;
 - Avatars: initials fallback on `surface-2` with deterministic hue from userId hash.
 - No stock photos on landing — real product screenshot/GIF (Phase 8) in a browser frame.
 - Empty-state illustrations: simple inline SVG (one weight, `text-muted`).
+
+## 11. Implementation notes (Phase 4)
+
+Where the shipped studio deliberately differs from the sketches above:
+
+- **Icons are inline SVG**, not Lucide: no extra dependency, same 16/20 px stroke weight. Revisit if the icon set grows past the studio.
+- **Transcript rail on < 1024 px** is a fixed bottom sheet that stops above the control bar, so mute/leave stay reachable; `Esc` and `Hide` close it. Desktop remains a 320–380 px docked rail and the preference persists in `localStorage`.
+- **Record is rendered disabled** until the recording phase ships; it never pretends to work.
+- **Captions rail ships ahead of captions** — the empty state explains the pipeline instead of showing fake lines. `aria-live="polite"` is already in place for Phase 5 entries.
+- **Budget chip / quota banner** (Phase 7) and **participants popover** (moderation) are not in the Phase 4 studio yet.
+- **Device selection** is on/off toggles in the pre-join screen; camera/mic *pickers* are P1.
+

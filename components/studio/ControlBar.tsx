@@ -118,18 +118,22 @@ function DeviceButton({
 export function ControlBar({
   microphoneEnabled,
   cameraEnabled,
+  captionsEnabled,
   busy,
   disabled,
   onToggleMicrophone,
   onToggleCamera,
+  onToggleCaptions,
   onLeave,
 }: {
   microphoneEnabled: boolean;
   cameraEnabled: boolean;
+  captionsEnabled: boolean;
   busy: boolean;
   disabled: boolean;
   onToggleMicrophone: () => void;
   onToggleCamera: () => void;
+  onToggleCaptions: () => void;
   onLeave: () => void;
 }) {
   return (
@@ -154,6 +158,23 @@ export function ControlBar({
       >
         <CameraIcon off={!cameraEnabled} />
       </DeviceButton>
+
+      <button
+        type="button"
+        aria-pressed={captionsEnabled}
+        aria-keyshortcuts="C"
+        aria-label={`Toggle captions, currently ${captionsEnabled ? "open" : "closed"}`}
+        title="Captions (C)"
+        onClick={onToggleCaptions}
+        disabled={disabled}
+        className={`grid size-11 place-items-center rounded-control border font-mono text-[11px] font-semibold tracking-[0.06em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+          captionsEnabled
+            ? "border-accent bg-accent/15 text-accent"
+            : "border-border bg-surface-2 text-text-muted hover:border-accent hover:text-text"
+        }`}
+      >
+        CC
+      </button>
 
       <span aria-hidden className="mx-1 h-6 w-px bg-border" />
 
