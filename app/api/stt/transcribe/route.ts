@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { getPrisma } from "@/lib/prisma";
 import { checkRoomRateLimit, checkUserRateLimit } from "@/lib/ratelimit";
+import { checkGroqCaptionQuota, incrementGroqChunksToday } from "@/lib/quota";
 import { getSession } from "@/lib/session";
 import { DataPacket_Kind, RoomServiceClient } from "livekit-server-sdk";
 
@@ -91,6 +92,16 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  // Groq daily chunk quota: captions auto-disable when exhausted.
+  const captionQuota = await checkGroqCaptionQuota();
+  if (!captionQuota.allowed) {
+    return errorResponse(
+      429,
+      "CAPTION_QUOTA_EXCEEDED",
+      captionQuota.message ?? "Caption quota exhausted for today.",
+    );
+  }
+
   const groqKey = process.env.GROQ_API_KEY;
   if (!groqKey || groqKey === "PENDING") {
     return errorResponse(
@@ -129,6 +140,9 @@ export async function POST(request: Request): Promise<Response> {
   if (!groqResponse.ok) {
     return errorResponse(502, "STT_UPSTREAM", "The caption service returned an error.");
   }
+
+  // Count this chunk against the daily Groq quota.
+  await incrementGroqChunksToday().catch(() => undefined);
 
   const transcript = (await groqResponse.json().catch(() => null)) as {
     text?: string;
