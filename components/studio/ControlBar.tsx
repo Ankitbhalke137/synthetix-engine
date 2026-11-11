@@ -144,7 +144,10 @@ export function ControlBar({
   onToggleRecording: () => void;
   onLeave: () => void;
 }) {
-  const recordingBusy = isRecording || recordingError !== null;
+  // `isRecording` already covers recording → uploading → stopping. Including
+  // `recordingError` here would latch the button disabled after one failure,
+  // with no way to retry.
+  const recordingBusy = isRecording;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl items-center justify-center gap-2">
