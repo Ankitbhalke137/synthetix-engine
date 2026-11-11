@@ -7,10 +7,19 @@ export function VideoGrid({
   participants,
   activeSpeaker,
   status,
+  canModerate = false,
+  pendingIdentity = null,
+  onMuteParticipant,
+  onKickParticipant,
 }: {
   participants: StudioParticipant[];
   activeSpeaker: string | null;
   status: StudioStatus;
+  /** Viewer holds host/moderator rights. */
+  canModerate?: boolean;
+  pendingIdentity?: string | null;
+  onMuteParticipant?: (identity: string) => void;
+  onKickParticipant?: (identity: string) => void;
 }) {
   if (participants.length === 0) {
     return (
@@ -49,6 +58,12 @@ export function VideoGrid({
           key={participant.identity}
           participant={participant}
           promoted={promoteSpeaker && participant.identity === activeSpeaker}
+          canModerate={
+            canModerate && !participant.isLocal && participant.role !== "host" && !!participant.role
+          }
+          moderationBusy={pendingIdentity === participant.identity}
+          onMute={() => onMuteParticipant?.(participant.identity)}
+          onKick={() => onKickParticipant?.(participant.identity)}
         />
       ))}
     </div>

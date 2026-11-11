@@ -4,8 +4,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { CopyLinkButton } from "@/components/CopyLinkButton";
-import type { Role } from "@/lib/room-policy";
+import {
+  endRoomAction,
+  kickParticipantAction,
+  muteParticipantAction,
+} from "@/app/actions/moderation";
+import { can, type Role } from "@/lib/room-policy";
 import { ControlBar } from "./ControlBar";
+import { EndRoomButton } from "./EndRoomButton";
 import { ROLE_LABEL } from "./labels";
 import { TranscriptRail } from "./TranscriptRail";
 import { useCaptionStream, type CaptionEntry } from "./useCaptionStream";
@@ -125,6 +131,62 @@ export function StudioSession({
     isConnected: status === "connected",
   });
 
+  const canModerate = can(viewer.role, "muteOthers");
+  const canEndRoom = can(viewer.role, "endRoom");
+  const { state: recordingState, stop: stopRecording } = recording;
+  const [moderationPending, setModerationPending] = useState<string | null>(null);
+  const [moderationError, setModerationError] = useState<string | null>(null);
+
+  const handleMuteParticipant = useCallback(
+    async (identity: string) => {
+      setModerationPending(identity);
+      setModerationError(null);
+
+      try {
+        const result = await muteParticipantAction(room.id, identity);
+
+        if (!result.ok) setModerationError(result.error.message);
+        else if (result.muted === false) {
+          setModerationError("That participant has no live microphone to mute.");
+        }
+      } finally {
+        setModerationPending(null);
+      }
+    },
+    [room.id],
+  );
+
+  const handleKickParticipant = useCallback(
+    async (identity: string) => {
+      setModerationPending(identity);
+      setModerationError(null);
+
+      try {
+        const result = await kickParticipantAction(room.id, identity);
+
+        if (!result.ok) setModerationError(result.error.message);
+      } finally {
+        setModerationPending(null);
+      }
+    },
+    [room.id],
+  );
+
+  const handleEndRoom = useCallback(async () => {
+    // Finish the host's recording before the room disappears, otherwise the
+    // multipart upload is abandoned. Failure must not block ending the room.
+    if (recordingState === "recording") {
+      await stopRecording().catch(() => undefined);
+    }
+
+    const result = await endRoomAction(room.id);
+
+    if (!result.ok) return result.error.message;
+
+    await leave();
+    return null;
+  }, [recordingState, stopRecording, room.id, leave]);
+
   // M toggles the mic, C the caption rail, Esc closes the mobile sheet.
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -192,6 +254,9 @@ export function StudioSession({
             <BudgetChip />
           </span>
           <CopyLinkButton path={`/studio/${room.slug}`} />
+          {canEndRoom && status === "connected" ? (
+            <EndRoomButton onEnd={handleEndRoom} />
+          ) : null}
           <button
             type="button"
             onClick={() => void leave()}
@@ -212,6 +277,12 @@ export function StudioSession({
         <p role="status" className="border-b border-border bg-surface px-4 py-2 text-sm text-text-muted">
           Camera or microphone access was blocked. Allow access in your browser, then use the
           control again.
+        </p>
+      ) : null}
+
+      {moderationError ? (
+        <p role="alert" className="border-b border-danger/40 bg-danger/10 px-4 py-2 text-sm text-danger">
+          {moderationError}
         </p>
       ) : null}
 
@@ -238,7 +309,15 @@ export function StudioSession({
               </div>
             </div>
           ) : (
-            <VideoGrid participants={participants} activeSpeaker={activeSpeaker} status={status} />
+            <VideoGrid
+              participants={participants}
+              activeSpeaker={activeSpeaker}
+              status={status}
+              canModerate={canModerate}
+              pendingIdentity={moderationPending}
+              onMuteParticipant={(identity) => void handleMuteParticipant(identity)}
+              onKickParticipant={(identity) => void handleKickParticipant(identity)}
+            />
           )}
         </main>
 

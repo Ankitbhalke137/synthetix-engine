@@ -55,6 +55,7 @@ CD, all documented before and alongside the code.
 - Create a room, copy the invite link, and join from the browser with zero installs — signed-in teammates directly, guests by display name.
 - Multi-guest WebRTC video via LiveKit — active-speaker grid, up to 9 tiles.
 - Role-aware access: host, moderator, participant, viewer (enforced on tokens and storage).
+- Host/moderator moderation: mute, remove, and end the room — enforced server-side and written to the audit log.
 - Pre-join device check, mic/camera controls, level meter, keyboard shortcuts.
 - Responsive transcript rail that becomes a bottom sheet on small screens.
 

@@ -8,6 +8,7 @@ import {
   RoomEvent,
   Track,
   type Participant,
+  type RemoteParticipant,
 } from "livekit-client";
 
 import {
@@ -131,6 +132,8 @@ export function useStudioRoom(
   const router = useRouter();
   const roomRef = useRef<Room | null>(null);
   const leavingRef = useRef(false);
+  /** Set when the server ends the room or removes this participant. */
+  const controlRef = useRef<"room-ended" | "kicked" | null>(null);
   const onCaptionRef = useRef<typeof onCaption>(onCaption);
 
   // Usage metering: the moment the participant actually connected, and which
@@ -160,6 +163,7 @@ export function useStudioRoom(
     });
     roomRef.current = room;
     leavingRef.current = false;
+    controlRef.current = null;
 
     const sync = () => {
       if (!disposed) setParticipants(snapshot(room));
@@ -210,6 +214,8 @@ export function useStudioRoom(
     const onDisconnected = () => {
       if (disposed) return;
       reportUsage();
+      // A server-ended room / kick already set a specific message.
+      if (controlRef.current) return;
       if (leavingRef.current) return;
       setStatus("error");
       setError("The connection ended. Rejoin when you are ready.");
@@ -227,8 +233,8 @@ export function useStudioRoom(
     room.on(RoomEvent.ActiveSpeakersChanged, onSpeakers);
     room.on(RoomEvent.Disconnected, onDisconnected);
 
-    const onData = (data: Uint8Array) => {
-      if (disposed || !onCaptionRef.current) return;
+    const onData = (data: Uint8Array, participant?: RemoteParticipant) => {
+      if (disposed || participant) return; // server-authored frames only
 
       try {
         const frame = JSON.parse(new TextDecoder().decode(data)) as {
@@ -241,11 +247,34 @@ export function useStudioRoom(
           text?: string;
           startMs?: number;
           endMs?: number;
+          identity?: string;
         };
 
+        if (frame.v !== 1) return;
+
+        // Control frames from moderation actions. Peers cannot spoof these
+        // because frames with a sender participant were rejected above.
+        if (frame.type === "room-ended") {
+          controlRef.current = "room-ended";
+          setStatus("error");
+          setError("The host ended this room.");
+          void room.disconnect();
+          return;
+        }
+
+        if (frame.type === "kicked" && frame.identity === room.localParticipant.identity) {
+          controlRef.current = "kicked";
+          setStatus("error");
+          setError("A moderator removed you from this room.");
+          void room.disconnect();
+          return;
+        }
+
         // Server-authored caption frames only.
-        if (frame.v === 1 && frame.type === "caption" && typeof frame.seq === "number") {
-          onCaptionRef.current({
+        const handleCaption = onCaptionRef.current;
+
+        if (frame.type === "caption" && typeof frame.seq === "number" && handleCaption) {
+          handleCaption({
             seq: frame.seq,
             speakerId: frame.speakerId ?? "",
             speaker: frame.speaker ?? "",
