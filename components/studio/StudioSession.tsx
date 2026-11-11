@@ -11,6 +11,7 @@ import { useCaptionStream, type CaptionEntry } from "./useCaptionStream";
 import { useRecording } from "./useRecording";
 import { useStudioRoom, type StudioPreferences } from "./useStudioRoom";
 import { VideoGrid } from "./VideoGrid";
+import { BudgetChip } from "./BudgetChip";
 
 const STATUS_COPY = {
   connecting: "Connecting…",
@@ -150,6 +151,7 @@ export function StudioSession({
                 · {participants.length} {participants.length === 1 ? "person" : "people"}
               </span>
             ) : null}
+            <BudgetChip />
           </span>
           <button
             type="button"
