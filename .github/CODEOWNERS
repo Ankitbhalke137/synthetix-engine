@@ -1,0 +1,13 @@
+# Default owners for everything in the repository.
+* @Ankitbhalke137
+
+# CI/CD, dependency updates, and contributor infrastructure.
+/.github/ @Ankitbhalke137
+
+# Governing docs and engineering contracts.
+/docs/ @Ankitbhalke137
+/AGENTS.md @Ankitbhalke137
+/README.md @Ankitbhalke137
+
+# Schema and migrations need extra care.
+/prisma/ @Ankitbhalke137
