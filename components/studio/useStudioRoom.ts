@@ -2,7 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ConnectionState, Room, RoomEvent, Track, type Participant } from "livekit-client";
+import {
+  ConnectionState,
+  Room,
+  RoomEvent,
+  Track,
+  type Participant,
+} from "livekit-client";
 
 import { parseRole, type Role } from "@/lib/room-policy";
 
@@ -96,11 +102,30 @@ export type StudioPreferences = { microphone: boolean; camera: boolean };
  * Owns the LiveKit connection for one studio session: token fetch → connect →
  * event-driven roster → cleanup. The room is disconnected on unmount and on
  * retry, so a failed join never leaves a dangling socket.
+ *
+ * `onCaption` is called for server-authored caption frames received over the
+ * LiveKit DataChannel (Phase 5 STT pipeline).
  */
-export function useStudioRoom(slug: string, preferences: StudioPreferences) {
+export function useStudioRoom(
+  slug: string,
+  preferences: StudioPreferences,
+  onCaption?: (frame: {
+    seq: number;
+    speakerId: string;
+    speaker: string;
+    text: string;
+    startMs: number;
+    endMs: number;
+  }) => void,
+) {
   const router = useRouter();
   const roomRef = useRef<Room | null>(null);
   const leavingRef = useRef(false);
+  const onCaptionRef = useRef<typeof onCaption>(onCaption);
+
+  useEffect(() => {
+    onCaptionRef.current = onCaption;
+  }, [onCaption]);
   const [status, setStatus] = useState<StudioStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [mediaBlocked, setMediaBlocked] = useState(false);
@@ -158,6 +183,40 @@ export function useStudioRoom(slug: string, preferences: StudioPreferences) {
     room.on(RoomEvent.LocalTrackUnpublished, sync);
     room.on(RoomEvent.ActiveSpeakersChanged, onSpeakers);
     room.on(RoomEvent.Disconnected, onDisconnected);
+
+    const onData = (data: Uint8Array) => {
+      if (disposed || !onCaptionRef.current) return;
+
+      try {
+        const frame = JSON.parse(new TextDecoder().decode(data)) as {
+          v?: number;
+          type?: string;
+          roomId?: string;
+          seq?: number;
+          speakerId?: string;
+          speaker?: string;
+          text?: string;
+          startMs?: number;
+          endMs?: number;
+        };
+
+        // Server-authored caption frames only.
+        if (frame.v === 1 && frame.type === "caption" && typeof frame.seq === "number") {
+          onCaptionRef.current({
+            seq: frame.seq,
+            speakerId: frame.speakerId ?? "",
+            speaker: frame.speaker ?? "",
+            text: frame.text ?? "",
+            startMs: frame.startMs ?? 0,
+            endMs: frame.endMs ?? 0,
+          });
+        }
+      } catch {
+        // Malformed data packet — ignore.
+      }
+    };
+
+    room.on(RoomEvent.DataReceived, onData);
 
     async function start() {
       try {

@@ -50,13 +50,12 @@ export function useCaptionStream({
   }, []);
 
   const postChunk = useCallback(
-    async (audio: ArrayBuffer, seq: number, startMs: number, endMs: number) => {
+    async (audio: ArrayBuffer, startMs: number, endMs: number) => {
       if (!mountedRef.current) return;
 
       const form = new FormData();
       const blob = new Blob([audio], { type: "audio/wav" });
       form.append("roomId", roomId);
-      form.append("seq", String(seq));
       form.append("chunk", blob, "chunk.wav");
 
       try {
@@ -81,14 +80,15 @@ export function useCaptionStream({
           text?: string;
           speaker?: string;
           speakerId?: string;
+          seq?: number;
           language?: string;
           duration?: number;
         } | null;
 
         const text = (payload?.text ?? "").trim();
-        if (text && mountedRef.current) {
+        if (text && typeof payload?.seq === "number" && mountedRef.current) {
           onCaption({
-            seq,
+            seq: payload.seq,
             speaker: payload?.speaker ?? "",
             speakerId: payload?.speakerId ?? "",
             text,
@@ -119,7 +119,6 @@ export function useCaptionStream({
       } else if (type === "chunk") {
         void postChunk(
           event.data.audio as ArrayBuffer,
-          event.data.seq,
           event.data.startMs,
           event.data.endMs,
         );
@@ -183,7 +182,6 @@ export function useCaptionStream({
           } else if (type === "chunk") {
             void postChunk(
               event.data.audio as ArrayBuffer,
-              event.data.seq,
               event.data.startMs,
               event.data.endMs,
             );
