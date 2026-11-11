@@ -22,6 +22,26 @@ export type StudioParticipant = {
 
 type TokenResponse = { token: string; url: string };
 
+/** LiveKit's own retries can leave a join pending; surface it instead of spinning. */
+const CONNECT_TIMEOUT_MS = 20_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 /** Token metadata is opaque JSON set at mint time (lib/room-policy.ts). */
 function roleFromMetadata(metadata: string | undefined): Role | null {
   if (!metadata) return null;
@@ -151,7 +171,11 @@ export function useStudioRoom(slug: string) {
         const { token, url } = (await response.json()) as TokenResponse;
         if (disposed) return;
 
-        await room.connect(url, token);
+        await withTimeout(
+          room.connect(url, token),
+          CONNECT_TIMEOUT_MS,
+          "The media server did not respond. Check your connection and try again.",
+        );
         if (disposed) return;
         setStatus("connected");
 
@@ -167,6 +191,7 @@ export function useStudioRoom(slug: string) {
         sync();
       } catch (cause) {
         if (disposed) return;
+        void room.disconnect();
         setStatus("error");
         setError(cause instanceof Error ? cause.message : "Could not join this room.");
       }
