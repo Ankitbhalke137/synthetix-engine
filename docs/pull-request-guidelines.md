@@ -1,6 +1,8 @@
 # Pull Request Guidelines — Synthetix Engine
 
 > Small, reviewable, documented PRs. Same rules for humans and AI agents — no exceptions for "just a quick change".
+>
+> New here? Start with [`CONTRIBUTING.md`](./CONTRIBUTING.md); this file is the review contract.
 
 ---
 
