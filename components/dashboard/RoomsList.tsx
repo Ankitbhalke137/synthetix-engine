@@ -43,6 +43,7 @@ export async function RoomsList() {
       {rooms.map((room) => (
         <li key={room.id}>
           <RoomCard
+            id={room.id}
             slug={room.slug}
             name={room.name}
             status={room.status}

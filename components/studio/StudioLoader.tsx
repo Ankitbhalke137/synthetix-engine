@@ -64,12 +64,28 @@ export async function StudioLoader({ roomSlug }: { roomSlug: string }) {
   const backLabel = session ? "Back to dashboard" : "Back to home";
 
   if (room.status === "ended" || room.status === "archived") {
+    const canViewRecordings = session !== null && room.hostId === session.user.id;
+
     return (
       <RoomStateCard
         title={room.status === "ended" ? "This room has ended" : "This room is archived"}
-        action={<BackLink href={backHref}>{backLabel}</BackLink>}
+        action={
+          <div className="flex flex-wrap gap-2">
+            {canViewRecordings ? (
+              <Link
+                href={`/dashboard/rooms/${room.id}`}
+                className="inline-flex rounded-control bg-accent px-4 py-2 text-sm font-semibold text-bg transition-opacity hover:opacity-90"
+              >
+                Recordings &amp; transcript
+              </Link>
+            ) : null}
+            <BackLink href={backHref}>{backLabel}</BackLink>
+          </div>
+        }
       >
-        Recordings and transcripts will appear here after the session is processed.
+        {canViewRecordings
+          ? "The host recording and session transcript are ready to play."
+          : "The recording and transcript are available to the host from their dashboard."}
       </RoomStateCard>
     );
   }
