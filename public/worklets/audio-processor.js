@@ -4,7 +4,6 @@
 // Chunk emission policy (binding ADR-003): VAD chunks 8–12 s, active speaker
 // only. Emit when (speech ended AND chunk ≥ 6 s) OR chunk ≥ 12 s (max) OR
 // silence flush at 15 s. Floor of 6 s keeps RPM headroom for multi-speaker.
-
 const TARGET_SAMPLE_RATE = 16000; // Groq STT consistency
 const FRAME_MS = 10; // analysis frame
 const HANGOVER_FRAMES = 60; // 600 ms silence hangover
@@ -44,9 +43,9 @@ class AudioProcessor extends AudioWorkletProcessor {
     };
   }
 
-  process(inputs, _outputs, __parameters) {
+  process(inputs, _outputs, _parameters) {
     void _outputs;
-    void __parameters;
+    void _parameters;
     const input = inputs[0];
     if (!input || !input[0]) return true;
 
@@ -90,7 +89,11 @@ class AudioProcessor extends AudioWorkletProcessor {
       const hangoverS = this._silenceRun * (FRAME_MS / 1000);
 
       let emit = false;
-      if (this._speaking && this._voicedRun === 0 && hangoverS >= HANGOVER_FRAMES * (FRAME_MS / 1000)) {
+      if (
+        this._speaking &&
+        this._voicedRun === 0 &&
+        hangoverS >= HANGOVER_FRAMES * (FRAME_MS / 1000)
+      ) {
         // Speech ended: emit if we have enough audio.
         emit = chunkS >= MIN_CHUNK_S;
       } else if (chunkS >= MAX_CHUNK_S) {
@@ -115,7 +118,7 @@ class AudioProcessor extends AudioWorkletProcessor {
     }
     if (this._rmsCount >= this._meterInterval) {
       const rms = Math.sqrt(this._rmsSum / this._rmsCount);
-      this.port.postMessage({ type: 'meter', rms });
+      this.port.postMessage({ type: "meter", rms });
       this._rmsSum = 0;
       this._rmsCount = 0;
     }
@@ -165,7 +168,7 @@ class AudioProcessor extends AudioWorkletProcessor {
 
     this.port.postMessage(
       {
-        type: 'chunk',
+        type: "chunk",
         seq,
         startMs: Math.round(this._chunkStartTime),
         endMs: Math.round(endTime),
@@ -187,10 +190,10 @@ class AudioProcessor extends AudioWorkletProcessor {
       }
     };
 
-    writeString(0, 'RIFF');
+    writeString(0, "RIFF");
     view.setUint32(4, 36 + dataSize, true);
-    writeString(8, 'WAVE');
-    writeString(12, 'fmt ');
+    writeString(8, "WAVE");
+    writeString(12, "fmt ");
     view.setUint32(16, 16, true); // PCM fmt chunk size
     view.setUint16(20, 1, true); // format = PCM
     view.setUint16(22, 1, true); // channels = 1
@@ -198,7 +201,7 @@ class AudioProcessor extends AudioWorkletProcessor {
     view.setUint32(28, byteRate, true); // byte rate
     view.setUint16(32, 2, true); // block align
     view.setUint16(34, 16, true); // bits per sample
-    writeString(36, 'data');
+    writeString(36, "data");
     view.setUint32(40, dataSize, true);
 
     for (let i = 0; i < pcm16.length; i += 1) {
@@ -209,4 +212,4 @@ class AudioProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('audio-processor', AudioProcessor);
+registerProcessor("audio-processor", AudioProcessor);
