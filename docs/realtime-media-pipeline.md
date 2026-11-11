@@ -151,7 +151,7 @@ stateDiagram-v2
     ready --> deleted: host deletes (authz'd DELETE)
 ```
 
-**Playback:** `GET /api/storage/playback?id=` → membership check → 5-min presigned GET (Range-enabled for seeking). The DB stores `storageKey` only — never a URL (errata #4).
+**Playback:** `GET /api/storage/playback?id=` → membership check → 5-min presigned GET (Range-enabled for seeking). The DB stores `storageKey` only — never a URL (errata #4). The host opens `/dashboard/rooms/[roomId]` from an ended room card; the page lists ready recordings, mints a fresh URL on each Play, and replays the persisted transcript beside it.
 
 ## 7. Quota guard (P0-8)
 

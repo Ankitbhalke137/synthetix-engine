@@ -72,7 +72,8 @@ CD, all documented before and alongside the code.
 
 - Client-side `MediaRecorder` + multipart presigned uploads — no paid egress.
 - Direct-to-storage uploads bypass Vercel bandwidth.
-- Recordings list API and authorized presigned playback.
+- Authorized playback page (`/dashboard/rooms/[roomId]`) with per-request presigned GETs.
+- Session transcript replay with speaker attribution and timestamps.
 - Storage keys stored in Postgres; URLs are signed on read, never persisted.
 
 **Trust and guardrails**

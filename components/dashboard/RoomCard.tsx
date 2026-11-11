@@ -11,12 +11,14 @@ const STATUS_STYLES: Record<RoomStatus, { label: string; className: string }> = 
 };
 
 export function RoomCard({
+  id,
   slug,
   name,
   status,
   createdAt,
   participants,
 }: {
+  id: string;
   slug: string;
   name: string;
   status: RoomStatus;
@@ -60,7 +62,12 @@ export function RoomCard({
           />
         </div>
       ) : (
-        <span className="text-sm text-text-muted">Read-only — playback ships with recordings</span>
+        <Link
+          href={`/dashboard/rooms/${id}`}
+          className="inline-flex w-fit items-center rounded-control border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:border-accent"
+        >
+          Recordings &amp; transcript
+        </Link>
       )}
     </article>
   );
