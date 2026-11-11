@@ -12,7 +12,7 @@ export function StudioRoom({
   room,
   viewer,
 }: {
-  room: { slug: string; name: string };
+  room: { id: string; slug: string; name: string };
   viewer: { name: string; role: Role };
 }) {
   const [preferences, setPreferences] = useState<StudioPreferences | null>(null);

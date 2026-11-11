@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Role } from "@/lib/room-policy";
 import { ControlBar } from "./ControlBar";
 import { ROLE_LABEL } from "./labels";
 import { TranscriptRail } from "./TranscriptRail";
+import { useCaptionStream, type CaptionEntry } from "./useCaptionStream";
 import { useStudioRoom, type StudioPreferences } from "./useStudioRoom";
 import { VideoGrid } from "./VideoGrid";
 
@@ -24,7 +25,7 @@ export function StudioSession({
   viewer,
   preferences,
 }: {
-  room: { slug: string; name: string };
+  room: { id: string; slug: string; name: string };
   viewer: { name: string; role: Role };
   preferences: StudioPreferences;
 }) {
@@ -58,6 +59,25 @@ export function StudioSession({
   useEffect(() => {
     window.localStorage.setItem(TRANSCRIPT_KEY, captionsOpen ? "open" : "closed");
   }, [captionsOpen]);
+
+  // Transcript entries: server-authored only, deduped by seq.
+  const [entries, setEntries] = useState<CaptionEntry[]>([]);
+  const lastSeqRef = useRef(-1);
+
+  const addCaption = useCallback((entry: CaptionEntry) => {
+    setEntries((current) => {
+      if (entry.seq <= lastSeqRef.current) return current; // ignore duplicates
+      lastSeqRef.current = entry.seq;
+      return [...current, entry];
+    });
+  }, []);
+
+  // Start the caption stream (mic + VAD + STT proxy) when captions are open.
+  useCaptionStream({
+    roomId: room.id,
+    onCaption: addCaption,
+    onMeter: undefined,
+  });
 
   // M toggles the mic, C the caption rail, Esc closes the mobile sheet.
   useEffect(() => {
@@ -172,7 +192,7 @@ export function StudioSession({
           )}
         </main>
 
-        {captionsOpen ? <TranscriptRail onClose={() => setCaptionsOpen(false)} /> : null}
+        {captionsOpen ? <TranscriptRail entries={entries} onClose={() => setCaptionsOpen(false)} /> : null}
       </div>
 
       {status === "error" ? null : (

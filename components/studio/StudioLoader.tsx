@@ -43,6 +43,7 @@ export async function StudioLoader({ roomSlug }: { roomSlug: string }) {
   const room = await getPrisma().room.findUnique({
     where: { slug: roomSlug },
     select: {
+      id: true,
       slug: true,
       name: true,
       status: true,
@@ -101,7 +102,7 @@ export async function StudioLoader({ roomSlug }: { roomSlug: string }) {
 
   return (
     <StudioRoom
-      room={{ slug: room.slug, name: room.name }}
+      room={{ id: room.id, slug: room.slug, name: room.name }}
       viewer={{ name: membership?.displayName ?? session.user.name, role }}
     />
   );
