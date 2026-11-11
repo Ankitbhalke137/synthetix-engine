@@ -9,27 +9,35 @@
 
 **Goals:** captions ≤ 12 s behind speech (P0-4) · recording survives flaky networks · zero server-side media compute · degrade gracefully (captions fail ≠ call fails).
 
-**Non-goals:** diarization ML · server-side composites · 4K · simulcast beyond 2 layers (P1).
+**Non-goals:** diarization ML · server-side composites · 4K · more than three simulcast layers.
 
 ## 2. Capture
 
 ```ts
-// spec — implementation comes in Phase 5
-const stream = await navigator.mediaDevices.getUserMedia({
+// Implemented in lib/media-settings.ts — one contract for preview, room, recorder.
+navigator.mediaDevices.getUserMedia({
   audio: {
     echoCancellation: true,   // browser WebRTC APM — replaces the cut DSP chain (ADR-008)
     noiseSuppression: true,
     autoGainControl: true,
+    voiceIsolation: true,
     channelCount: 1,
+    sampleRate: 48_000,
   },
-  video: { width: 1280, height: 720, frameRate: 30 }, // active speaker only; grid runs 360p
+  // High-DPI laptop screens deserve better than the browser's VGA default.
+  video: { width: 1920, height: 1080, frameRate: 30 },
 });
 ```
 
 Rules:
 - Device selection (mic dropdown) stored per user in `localStorage`.
 - Permission denial → dedicated error state with OS-level guidance (never a blank grid).
-- The **same** mic stream feeds LiveKit publish, the worklet (VAD/meter), and (host only) `MediaRecorder`.
+- The **same** published mic track feeds the VAD worklet and (host only) `MediaRecorder`.
+  Captions never call `getUserMedia` a second time.
+- Publishing is explicit: 1080p primary + 720p/360p simulcast layers, VP8, Opus
+  48 kbps mono, RED on, DTX off (DTX clips word onsets and makes recordings choppy).
+- `adaptiveStream` picks 360p for grid tiles and 1080p for the active speaker, so
+  quality follows the pixels on screen without spending bandwidth on hidden video.
 
 ## 3. AudioWorklet — meter + VAD only
 
@@ -109,8 +117,11 @@ Pipeline order (cheap checks first):
 
 ### 6.1 Capture (host only)
 
-- `MediaRecorder(stream, { mimeType: pickFirstSupported(["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/mp4"]) })`
-- `start(timeslice = 10_000)` → `ondataavailable(blob)` per slice → upload queue.
+- Wrap the **already-published** LiveKit camera and mic tracks: `video/webm;codecs=vp9,opus`
+  (fallbacks `vp8,opus` → `video/webm`). If the host has no camera, fall back to Opus audio.
+- `start(timeslice = 1_000)` → buffer blobs until a part reaches the 5 MiB S3 floor,
+  then upload sequentially. The tail is flushed on `stop`.
+- Never call `track.stop()` on a LiveKit track — it belongs to the call.
 - Unsupported browser → disable record button + tooltip (never break the call).
 - UI contract: persistent "REC" indicator + "keep this tab open" warning (ADR-002 risk).
 
@@ -118,14 +129,15 @@ Pipeline order (cheap checks first):
 
 | Step | Detail |
 |---|---|
-| Init | `POST /api/storage/presigned {roomId, partIndex}` → authz (host + live room) → `CreateMultipartUpload` → uploadId |
-| Part URL | `UploadPartCommand` presigned, **15 min TTL**, one part per 10 s slice (~0.5–2 MB) |
+| Init | `POST /api/storage/presigned/init {roomId, recordingId, mimeType}` → authz (host + live room) → `CreateMultipartUpload` → uploadId |
+| Part URL | `POST /api/storage/presigned/part {recordingId, uploadId, partNumber}` → `UploadPartCommand` presigned, **15 min TTL** |
 | Send | `PUT` directly from browser — **never through Vercel** (ADR-005) |
-| Expired (403/410) | re-request same `partIndex` URL, retry ×3 with backoff, then mark `failed` |
+| Expired (403/410) | re-request the same `partNumber` URL, retry ×3 with backoff, then mark `failed` |
 | Complete | `POST …/complete {parts:[{PartNumber, ETag}]}` → `CompleteMultipartUpload` → `Recording.status = ready` |
 | Abort | room ended + 30 min without complete → `AbortMultipartUpload` (lifecycle rule, P1) + status `failed` |
 
-**Object key convention:** `rooms/{roomId}/recordings/{recordingId}/{partIndex}.webm` — flat prefix enables per-room listing, deletion, and Neon branch isolation for free.
+**Object key convention:** `rooms/{roomId}/recordings/{recordingId}.webm` — a single multipart
+object per recording, so playback is one presigned GET and deletion is one key.
 
 ### 6.3 States
 

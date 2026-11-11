@@ -10,6 +10,11 @@ import {
   type Participant,
 } from "livekit-client";
 
+import {
+  AUDIO_CAPTURE_OPTIONS,
+  PUBLISH_OPTIONS,
+  VIDEO_CAPTURE_OPTIONS,
+} from "@/lib/media-settings";
 import { parseRole, type Role } from "@/lib/room-policy";
 
 export type StudioStatus = "connecting" | "connected" | "reconnecting" | "error";
@@ -146,7 +151,13 @@ export function useStudioRoom(
 
   useEffect(() => {
     let disposed = false;
-    const room = new Room({ adaptiveStream: true, dynacast: true });
+    const room = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      audioCaptureDefaults: AUDIO_CAPTURE_OPTIONS,
+      videoCaptureDefaults: VIDEO_CAPTURE_OPTIONS,
+      publishDefaults: PUBLISH_OPTIONS,
+    });
     roomRef.current = room;
     leavingRef.current = false;
 
@@ -302,8 +313,24 @@ export function useStudioRoom(
         // drop the connection — it becomes a banner and the room still works.
         const requests: Promise<unknown>[] = [];
 
-        if (preferences.camera) requests.push(room.localParticipant.setCameraEnabled(true));
-        if (preferences.microphone) requests.push(room.localParticipant.setMicrophoneEnabled(true));
+        if (preferences.camera) {
+          requests.push(
+            room.localParticipant.setCameraEnabled(
+              true,
+              VIDEO_CAPTURE_OPTIONS,
+              PUBLISH_OPTIONS,
+            ),
+          );
+        }
+        if (preferences.microphone) {
+          requests.push(
+            room.localParticipant.setMicrophoneEnabled(
+              true,
+              AUDIO_CAPTURE_OPTIONS,
+              PUBLISH_OPTIONS,
+            ),
+          );
+        }
 
         const media = await Promise.allSettled(requests);
 
@@ -356,9 +383,15 @@ export function useStudioRoom(
       if (device === "microphone") {
         await room.localParticipant.setMicrophoneEnabled(
           !room.localParticipant.isMicrophoneEnabled,
+          AUDIO_CAPTURE_OPTIONS,
+          PUBLISH_OPTIONS,
         );
       } else {
-        await room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled);
+        await room.localParticipant.setCameraEnabled(
+          !room.localParticipant.isCameraEnabled,
+          VIDEO_CAPTURE_OPTIONS,
+          PUBLISH_OPTIONS,
+        );
       }
 
       setParticipants(snapshot(room));

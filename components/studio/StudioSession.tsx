@@ -111,6 +111,7 @@ export function StudioSession({
   // Start the caption stream (mic + VAD + STT proxy) while captions are active.
   useCaptionStream({
     roomId: room.id,
+    audioTrack: local?.audioTrack?.mediaStreamTrack ?? null,
     enabled: captionsActive,
     onCaption: addCaption,
   });
@@ -119,6 +120,7 @@ export function StudioSession({
   const recording = useRecording({
     roomId: room.id,
     audioTrack: local?.audioTrack ?? null,
+    videoTrack: local?.videoTrack ?? null,
     isHost: viewer.role === "host",
     isConnected: status === "connected",
   });
