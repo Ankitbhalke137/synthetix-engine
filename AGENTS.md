@@ -20,7 +20,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 |---|---|
 | **What** | Browser-based live studio: multi-guest WebRTC rooms, real-time AI captions (Groq Whisper), client-side recordings → Neon Object Storage. \$0/month free-tier stack. |
 | **Why** | Showcase SDE project: requirements → architecture + ADRs → security → quality gates → CI, all engineering-doc driven. |
-| **Phase** | **8 complete** (docs ✅, scaffold ✅, env/DB ✅, auth ✅, rooms + LiveKit tokens ✅, studio UI ✅, STT pipeline ✅, recording ✅, quota guards + ratelimits ✅, tests + CI/CD ✅ — 70 tests, GitHub Actions, CodeQL, Vercel deploy). Optional leftover: demo GIF. See [`README.md`](./README.md#implementation-status). |
+| **Phase** | **8 complete** (docs ✅, scaffold ✅, env/DB ✅, auth ✅, rooms + LiveKit tokens ✅, studio UI ✅, STT pipeline ✅, recording ✅, quota guards + ratelimits ✅, tests + CI/CD ✅ — 71 tests, GitHub Actions, CodeQL, Vercel deploy). Optional leftover: demo GIF. See [`README.md`](./README.md#implementation-status). |
 | **Stack** | Next.js **16.4.6** (App Router) · React 19.3 · TypeScript strict · Tailwind **v4** (CSS `@theme`, no config file) · Prisma **7** (`prisma-client` generator, `prisma7.config.ts`, generated client in `generated/`) + `@neondatabase/serverless` · Better Auth · LiveKit · Groq · Upstash · AWS S3 SDK (Neon S3 endpoint) |
 | **Node** | Local **v20.20.2** — some installed packages warn they want Node ≥ 22 (`machina`, `@prisma/streams-local`). Non-blocking now; if Prisma tooling misbehaves, switch to Node 22 LTS (also matches Vercel builds). |
 | **Original idea** | [`BLUEPRINT-ORIGINAL.md`](./docs/BLUEPRINT-ORIGINAL.md) — kept for provenance; **superseded** by this doc set (§6 errata). |
@@ -48,7 +48,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | Groq 429 behavior | `429` + `retry-after` header; never charges | same |
 | LiveKit Cloud Build (free) | **5,000 WebRTC participant-min/mo · 100 concurrent · 50 GB downstream/mo · 60 transcode-min/mo · 1,000 agent-min/mo** — *hard caps: exceeding = new requests FAIL (no overage)* | https://docs.livekit.io/deploy/admin/quotas-and-limits/ · https://livekit.com/pricing |
 | Neon Postgres (free) | 0.5 GiB storage, scale-to-zero, branching | https://neon.com/pricing |
-| Neon Object Storage (GA Sep 2026) | **5 GB/project** · S3-compatible (subset) · presigned URLs · single PUT 5 GiB · multipart 10 GiB · branches copy-on-write with your DB · region currently **us-east-2** — copy endpoint from console | https://neon.com/docs/storage/overview · https://neon.com/blog/building-neon-object-storage |
+| Neon Object Storage (GA Sep 2026) | **5 GB/project** · S3-compatible (subset) · presigned URLs · single PUT 5 GiB · multipart 10 GiB · branches copy-on-write with your DB · region varies per project (this deployment: **ap-southeast-1**) — copy endpoint from console | https://neon.com/docs/storage/overview · https://neon.com/blog/building-neon-object-storage |
 | Vercel Hobby | 100 GB bandwidth/mo | https://vercel.com/docs/limits |
 | Upstash free | 10,000 commands/day | https://upstash.com/pricing |
 
@@ -103,7 +103,7 @@ npx prisma generate    # already runs via postinstall
 | 2 | 2-second WAV slices to Groq | Infeasible (20 RPM, min 10 s billable) → VAD 8–12 s, active speaker only |
 | 3 | Browser pushes audio to Groq | **Server proxy only** (`/api/stt/transcribe`) |
 | 4 | `Recording.fileUrl` column | Removed — `storageKey` + sign-on-read |
-| 5 | Storage endpoint `us-east-1` | Console says **us-east-2** (verify yours) |
+| 5 | Storage endpoint `us-east-1` | Region comes from the console; this deployment uses **ap-southeast-1** (verify yours) |
 | 6 | `tailwind.config.js` | Tailwind v4: tokens in `app/globals.css` `@theme` |
 | 7 | Full DSP chain in worklet (EQ/noise/gain) | Cut (ADR-008): `getUserMedia` constraints + worklet meter/VAD only |
 | 8 | Upstash as primary "queue" | P0 = rate limiting only; retry queue is P1 (YAGNI until 429s matter) |
@@ -117,9 +117,9 @@ npx prisma generate    # already runs via postinstall
 | `BETTER_AUTH_SECRET` | server | ≥ 32 random bytes; rotate on leak |
 | `BETTER_AUTH_URL` | server | must equal deployed URL in prod |
 | `DATABASE_URL` | server | **pooled** Neon string (`ep-…-pooler`) — ADR-007 |
-| `NEON_STORAGE_ENDPOINT` | server | from Neon console (S3-compatible, us-east-2) |
+| `NEON_STORAGE_ENDPOINT` | server | from Neon console (S3-compatible; region varies) |
 | `NEON_STORAGE_ACCESS_KEY_ID` / `NEON_STORAGE_SECRET_ACCESS_KEY` | server | scoped Neon credential (storage read/write) |
-| `NEON_STORAGE_BUCKET_NAME` / `NEON_STORAGE_REGION` | server | `synthetix-recordings` / `us-east-2` |
+| `NEON_STORAGE_BUCKET_NAME` / `NEON_STORAGE_REGION` | server | `synthetix-recordings` / match the endpoint region (this deployment: `ap-southeast-1`) |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | server | token minting + moderation server API |
 | `NEXT_PUBLIC_LIVEKIT_URL` | client | **the only** secret-adjacent public var (URL, not key) |
 | `GROQ_API_KEY` | server | STT proxy only — never client |
@@ -149,8 +149,8 @@ npx prisma generate    # already runs via postinstall
 | 4 | Studio UI (design-spec states) | ✅ verified in-browser (pre-join → grid → controls → transcript shell) |
 | 5 | STT pipeline (VAD → Groq → DataChannel) | ✅ verified — proxy, worklet, DataChannel broadcast |
 | 6 | Recording (multipart → playback) | ✅ verified — MediaRecorder, presigned parts, Neon Storage |
-| 7 | Quota guards + ratelimits + polish | ✅ verified — rate limits, quota guards, budget chip, recordings list |
-| 8 | Tests + CI/CD + contributor infrastructure | ✅ verified — 70 tests, `quality` + `build` required checks, CodeQL, Dependabot, Vercel deploy workflow |
+| 7 | Quota guards + ratelimits + polish | ✅ verified — rate limits, quota guards, budget chip |
+| 8 | Tests + CI/CD + contributor infrastructure | ✅ verified — 71 tests, `quality` + `build` required checks, CodeQL, Dependabot, Vercel deploy workflow |
 | 8b | Demo GIF | ⬜ optional |
 
 **Definition of Done:** [`code-complexity-and-quality.md` §8](./docs/code-complexity-and-quality.md) · **Agent workflow:** [`subagent-team.md`](./docs/subagent-team.md) · **Phase 2 kickoff:** schema per `database-and-security.md` §2, Better Auth per §3.
