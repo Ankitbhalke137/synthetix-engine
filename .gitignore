@@ -43,3 +43,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local code-intelligence index + agent tooling (generated)
+.gitnexus/
+.claude/
+CLAUDE.md
