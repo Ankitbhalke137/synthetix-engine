@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getLiveKitUrl, mintRoomToken } from "@/lib/livekit";
 import { getPrisma } from "@/lib/prisma";
 import { admitParticipant, prismaRoomStore, RoomError, type RoomErrorCode } from "@/lib/rooms";
+import { checkRoomRateLimit, checkUserRateLimit } from "@/lib/ratelimit";
 import { getSession } from "@/lib/session";
 
 /**
@@ -52,6 +53,28 @@ export async function POST(request: Request): Promise<Response> {
   // No session and no name means the visitor has not chosen a guest identity.
   if (!session && !parsed.data.displayName) {
     return errorResponse(401, "UNAUTHENTICATED", "Enter a display name to join as a guest.");
+  }
+
+  // Rate limit token minting so guests and users cannot brute-force room
+  // admission. Fail open when Upstash is unavailable.
+  const rateLimit = session
+    ? await checkUserRateLimit(session.user.id)
+    : await checkRoomRateLimit(parsed.data.slug);
+
+  if (!rateLimit.success) {
+    const retryAfter = Math.max(0, (rateLimit.reset ?? 0) * 1000 - Date.now());
+    return Response.json(
+      {
+        error: {
+          code: "TOKEN_RATE_LIMITED",
+          message: "Too many join attempts. Please wait before trying again.",
+        },
+      },
+      {
+        status: 429,
+        headers: { ...NO_STORE, "retry-after": String(Math.ceil(retryAfter / 1000)) },
+      },
+    );
   }
 
   try {
