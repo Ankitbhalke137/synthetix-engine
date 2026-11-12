@@ -20,7 +20,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 |---|---|
 | **What** | Browser-based live studio: multi-guest WebRTC rooms, real-time AI captions (Groq Whisper), client-side recordings → Neon Object Storage. \$0/month free-tier stack. |
 | **Why** | Showcase SDE project: requirements → architecture + ADRs → security → quality gates → CI, all engineering-doc driven. |
-| **Phase** | **8 complete** (docs ✅, scaffold ✅, env/DB ✅, auth ✅, rooms + LiveKit tokens ✅, studio UI ✅, STT pipeline ✅, recording ✅, quota guards + ratelimits ✅, tests + CI/CD ✅ — 71 tests, GitHub Actions, CodeQL, Vercel deploy). Optional leftover: demo GIF. See [`README.md`](./README.md#implementation-status). |
+| **Phase** | **8 complete** (docs ✅, scaffold ✅, env/DB ✅, auth ✅, rooms + LiveKit tokens ✅, studio UI ✅, STT pipeline ✅, recording ✅, quota guards + ratelimits ✅, tests + CI/CD ✅ — 83 tests, GitHub Actions, CodeQL, Vercel deploy). Optional leftover: demo GIF. See [`README.md`](./README.md#implementation-status). |
 | **Stack** | Next.js **16.4.6** (App Router) · React 19.3 · TypeScript strict · Tailwind **v4** (CSS `@theme`, no config file) · Prisma **7** (`prisma-client` generator, `prisma7.config.ts`, generated client in `generated/`) + `@neondatabase/serverless` · Better Auth · LiveKit · Groq · Upstash · AWS S3 SDK (Neon S3 endpoint) |
 | **Node** | Local **v20.20.2** — some installed packages warn they want Node ≥ 22 (`machina`, `@prisma/streams-local`). Non-blocking now; if Prisma tooling misbehaves, switch to Node 22 LTS (also matches Vercel builds). |
 | **Original idea** | [`BLUEPRINT-ORIGINAL.md`](./docs/BLUEPRINT-ORIGINAL.md) — kept for provenance; **superseded** by this doc set (§6 errata). |
@@ -150,7 +150,7 @@ npx prisma generate    # already runs via postinstall
 | 5 | STT pipeline (VAD → Groq → DataChannel) | ✅ verified — proxy, worklet, DataChannel broadcast |
 | 6 | Recording (multipart → playback) | ✅ verified — MediaRecorder, presigned parts, Neon Storage |
 | 7 | Quota guards + ratelimits + polish | ✅ verified — rate limits, quota guards, budget chip |
-| 8 | Tests + CI/CD + contributor infrastructure | ✅ verified — 71 tests, `quality` + `build` required checks, CodeQL, Dependabot, Vercel deploy workflow |
+| 8 | Tests + CI/CD + contributor infrastructure | ✅ verified — 83 tests, `quality` + `build` required checks, CodeQL, Dependabot, Vercel deploy workflow |
 | 8b | Demo GIF | ⬜ optional |
 
 **Definition of Done:** [`code-complexity-and-quality.md` §8](./docs/code-complexity-and-quality.md) · **Agent workflow:** [`subagent-team.md`](./docs/subagent-team.md) · **Phase 2 kickoff:** schema per `database-and-security.md` §2, Better Auth per §3.

@@ -30,7 +30,7 @@
 ## Status
 
 **Phase 8 complete — tests + CI/CD ✅.** The app is deployed and building clean:
-`tsc` ✅ · `lint` ✅ · 71 tests ✅ · `next build` ✅ · CI on every PR ✅.
+`tsc` ✅ · `lint` ✅ · 83 tests ✅ · `next build` ✅ · CI on every PR ✅.
 The only optional leftover is a short demo GIF.
 
 ---
@@ -337,7 +337,7 @@ docs/                PRD, architecture, ADRs, specs, contributing, CI/CD
 | 5 | STT pipeline: worklet → VAD → Groq → DataChannel | ✅ verified |
 | 6 | Recording: MediaRecorder → multipart presigned upload | ✅ verified |
 | 7 | Quota guards, rate limits, error/empty states | ✅ verified |
-| 8 | Tests, CI/CD, contributor docs | ✅ 71 tests · CI · CD · CodeQL |
+| 8 | Tests, CI/CD, contributor docs | ✅ 83 tests · CI · CD · CodeQL |
 | 8b | Demo GIF | ⬜ optional |
 
 ## Errata vs the original blueprint

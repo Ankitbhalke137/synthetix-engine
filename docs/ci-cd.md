@@ -45,7 +45,7 @@ Both jobs must pass before a PR can merge. They run in parallel.
 5. `npx prisma validate` — schema is syntactically valid and has a URL
 6. `npm run lint`
 7. `npm run typecheck`
-8. `npm test` — Vitest (71 tests)
+8. `npm test` — Vitest (83 tests)
 
 ### `build`
 

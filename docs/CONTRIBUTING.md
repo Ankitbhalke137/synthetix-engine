@@ -129,7 +129,7 @@ Useful scopes: `auth`, `room`, `studio`, `stt`, `record`, `db`, `ci`, `docs`.
 ```bash
 npm run lint          # ESLint (no warnings allowed in changed files)
 npm run typecheck     # next typegen + TypeScript strict
-npm test              # Vitest — currently 71 tests
+npm test              # Vitest — currently 83 tests
 npm run build         # Next.js production build
 ```
 
